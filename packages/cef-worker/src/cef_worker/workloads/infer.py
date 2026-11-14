@@ -176,6 +176,27 @@ class InferWorkload(Workload):
                 raise WorkloadError(f"provider fallback refused: {wanted}", retryable=False)
         return session
 
+    # ------------------------------------------------------------------ warmup
+    def warmup(self, model: str = "yolo11n", imgsz: int = 640) -> float:
+        """Pay the CUDA context / cuDNN init cost before the first real task.
+
+        Observed on a 4060 Ti: the first inference after process start takes ~3.5 s,
+        the next ones 30 ms. Without this, a benchmark's first task measures the
+        driver, not the pool.
+        """
+        import time
+
+        import numpy as np
+
+        t0 = time.perf_counter()
+        try:
+            sess = self._session(model)
+            dummy = np.zeros((1, 3, imgsz, imgsz), dtype=np.float32)
+            sess.run(None, {sess.get_inputs()[0].name: dummy})
+        except Exception:  # noqa: BLE001 - warmup must never block the agent
+            return 0.0
+        return time.perf_counter() - t0
+
     # -------------------------------------------------------------------- run
     def run(self, ctx: TaskContext) -> TaskResult:
         import numpy as np

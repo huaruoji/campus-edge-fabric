@@ -166,6 +166,18 @@ class Agent:
             self._heartbeat_stop.wait(self.cfg.heartbeat_interval_s)
 
     # -------------------------------------------------------------------- loop
+    def _warmup(self) -> None:
+        """Front-load GPU/driver init so the first leased task is not penalised."""
+        infer = self.adapters.get("infer")
+        if infer is None or not infer.available():
+            return
+        try:
+            took = infer.warmup()
+            if took:
+                log.info("infer warmup finished in %.2fs (the first real task won't pay driver init)", took)
+        except Exception:  # noqa: BLE001
+            pass
+
     def _clean_orphaned_work(self) -> None:
         """A crash mid-task leaves its scratch dir behind. Nothing is running at
         boot, so everything under work/ is garbage by definition."""
@@ -192,6 +204,7 @@ class Agent:
         hb = threading.Thread(target=self._heartbeat_loop, name="cef-heartbeat", daemon=True)
         self._heartbeat_thread = hb
         hb.start()
+        threading.Thread(target=self._warmup, name="cef-warmup", daemon=True).start()
         log.info("slots=%d max_batch=%d tags=%s", self.slots, self.max_batch, self.cfg.tags or "-")
         try:
             while not self._stop.is_set():

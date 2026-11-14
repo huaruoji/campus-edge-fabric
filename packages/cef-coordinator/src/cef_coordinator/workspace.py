@@ -242,8 +242,8 @@ def matches(actual, reference):
                 i
                 for i, ref in enumerate(left)
                 if ref["class_id"] == det["class_id"]
-                and abs(ref["conf"] - det["conf"]) <= 0.003
-                and max(abs(a - b) for a, b in zip(ref["xyxy"], det["xyxy"], strict=True)) <= 0.5
+                and abs(ref["conf"] - det["conf"]) <= 0.003 + 1e-9
+                and max(abs(a - b) for a, b in zip(ref["xyxy"], det["xyxy"], strict=True)) <= 0.5 + 1e-9
             ),
             None,
         )

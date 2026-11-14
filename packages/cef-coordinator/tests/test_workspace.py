@@ -199,5 +199,10 @@ def test_full_experiment_orchestration_with_simulated_outputs(workspace, tmp_pat
 def test_numerical_reference_matching():
     original = {"model": "yolo11n", "size": [80, 60], "detections": [{"class_id": 0, "conf": 0.8, "xyxy": [1, 2, 30, 40]}]}
     assert matches(original, original)
+    # Decimal boundary values must remain inclusive after binary float subtraction.
+    boundary = {**original, "detections": [{**original["detections"][0], "conf": 0.803}]}
+    assert matches(boundary, original)
+    outside = {**original, "detections": [{**original["detections"][0], "conf": 0.8031}]}
+    assert not matches(outside, original)
     assert not matches({**original, "detections": original["detections"] * 2}, original)
     assert not matches({**original, "detections": [{"class_id": 1, "conf": 0.8, "xyxy": [1, 2, 30, 40]}]}, original)

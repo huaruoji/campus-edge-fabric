@@ -21,7 +21,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import __version__, api, db, scheduler
+from . import __version__, api, db, scheduler  # noqa: F401
 from .config import Settings
 from .store import BlobStore
 
@@ -40,6 +40,7 @@ code{background:#f2f4f7;padding:2px 6px;border-radius:4px}</style>
 async def _maintenance(app: FastAPI) -> None:
     s: Settings = app.state.settings
     last_prune = 0.0
+    last_gc = 0.0
     while True:
         try:
             scheduler.reap_expired_leases(s.db_path, s)
@@ -49,6 +50,11 @@ async def _maintenance(app: FastAPI) -> None:
                 scheduler.prune_stats(s.db_path, s)
                 app.state.blobs.cleanup_tmp()
                 last_prune = now
+            if now - last_gc > 600:
+                deleted, freed = scheduler.gc_blobs(s.db_path, s, app.state.blobs.root)
+                if deleted:
+                    log.info("blob gc: %d files, %.1f MB", deleted, freed / 1e6)
+                last_gc = now
         except Exception:  # noqa: BLE001 - never let the loop die
             log.exception("maintenance loop error")
         await asyncio.sleep(s.reaper_interval_s)

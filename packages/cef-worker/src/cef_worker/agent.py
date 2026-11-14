@@ -36,7 +36,7 @@ class Agent:
     def __init__(self, cfg: WorkerConfig) -> None:
         self.cfg = cfg
         self.api = WorkerAPI(cfg.server, cfg.token)
-        self.monitor = ResourceMonitor()
+        self.monitor = ResourceMonitor(cfg.data_dir)
         self.adapters: dict[str, Workload] = load_adapters(
             enabled=cfg.workloads or None, model_dir=cfg.model_dir, blender_bin=cfg.blender_bin
         )
@@ -56,6 +56,7 @@ class Agent:
         self._drain_requested = threading.Event()
         self.completed = 0
         self.failed = 0
+        self._disk_warned = False
         self.last_sample = self.monitor.sample()
 
     # ------------------------------------------------------------------ setup
@@ -138,6 +139,8 @@ class Agent:
                     "cpu_pct": sample.cpu_pct,
                     "mem_pct": sample.mem_pct,
                     "gpu_pct": sample.gpu_pct,
+                    "disk_free_gb": sample.disk_free_gb,
+                    "disk_total_gb": sample.disk_total_gb,
                     "running": len(active),
                 }
                 resp = self.api.heartbeat(self.worker_id or "", body, active)
@@ -157,8 +160,28 @@ class Agent:
             self._heartbeat_stop.wait(self.cfg.heartbeat_interval_s)
 
     # -------------------------------------------------------------------- loop
+    def _clean_orphaned_work(self) -> None:
+        """A crash mid-task leaves its scratch dir behind. Nothing is running at
+        boot, so everything under work/ is garbage by definition."""
+        work_root = self.cfg.data_dir / "work"
+        if not work_root.is_dir():
+            return
+        freed = 0
+        for child in work_root.iterdir():
+            try:
+                if child.is_dir():
+                    for p in child.rglob("*"):
+                        if p.is_file():
+                            freed += p.stat().st_size
+                    shutil.rmtree(child, ignore_errors=True)
+            except OSError:
+                continue
+        if freed:
+            log.info("cleaned %.1f MB of stale task scratch space", freed / 1e6)
+
     def run(self) -> None:
         self.cfg.ensure_dirs()
+        self._clean_orphaned_work()
         self.register()
         hb = threading.Thread(target=self._heartbeat_loop, name="cef-heartbeat", daemon=True)
         self._heartbeat_thread = hb
@@ -190,6 +213,18 @@ class Agent:
         sample = self.last_sample
         cpu = sample.cpu_pct or 0.0
         gpu = sample.gpu_pct or 0.0
+        if sample.disk_free_gb is not None and sample.disk_free_gb < self.cfg.min_free_gb:
+            if not self._disk_warned:
+                log.warning(
+                    "only %.1f GB free (< %.1f GB): pausing new tasks so we do not fill the owner's disk",
+                    sample.disk_free_gb,
+                    self.cfg.min_free_gb,
+                )
+                self._disk_warned = True
+            return 0
+        if self._disk_warned:
+            log.info("disk pressure cleared, resuming")
+            self._disk_warned = False
         if cpu > self.cfg.max_cpu_pct or gpu > self.cfg.max_gpu_pct:
             return 1 if running == 0 else 0  # owner is using the machine: take at most one task
         return max(1, min(free, self.suggested_capacity, self.max_batch))

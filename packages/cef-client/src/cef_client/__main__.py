@@ -47,6 +47,9 @@ def build_parser() -> argparse.ArgumentParser:
     st = sub.add_parser("stats", help="pool statistics")
     st.add_argument("--window", type=int, default=300)
 
+    stg = sub.add_parser("storage", help="blob store usage, quota and coordinator disk")
+    stg.add_argument("--json", action="store_true", default=False, help="raw JSON")
+
     sub.add_parser("workloads", help="list workload kinds")
 
     job = sub.add_parser("job", help="job operations")
@@ -112,6 +115,17 @@ def cmd_workers(c: CefClient, args: argparse.Namespace) -> int:
         mean = f"{w.mean_duration_s:.3f}" if w.mean_duration_s else "-"
         wl = ",".join(x.kind for x in w.workloads if x.available)
         print(f"{w.name[:17]:<18}{w.state:<10}{cpu:>6}{gpu:>6}{w.slots:>6}{w.completed_total:>7}{mean:>9}  {wl}")
+    return 0
+
+
+def cmd_storage(c: CefClient, args: argparse.Namespace) -> int:
+    body = c.request("GET", "/api/v1/storage").json()
+    if getattr(args, "json", False):
+        print(json.dumps(body, indent=2, ensure_ascii=False))
+        return 0
+    print(f"blob 存储 : {body['blob_bytes'] / 1e9:.2f} GB / {body['quota_gb']:.1f} GB ({body['used_pct_of_quota']}%)")
+    print(f"文件数    : {body['blob_count']}   保留 {body['retention_days']} 天   单文件上限 {body['max_upload_mb']:.0f} MB")
+    print(f"coordinator 磁盘: 可用 {body['disk_free_gb']} GB / 共 {body['disk_total_gb']} GB")
     return 0
 
 
@@ -208,6 +222,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_workers(client, args)
         if args.cmd == "stats":
             return cmd_stats(client, args)
+        if args.cmd == "storage":
+            return cmd_storage(client, args)
         if args.cmd == "workloads":
             return cmd_workloads(client, args)
         if args.cmd == "job":

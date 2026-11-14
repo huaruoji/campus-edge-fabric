@@ -270,6 +270,30 @@
           "default": null,
           "title": "Gpu Pct"
         },
+        "disk_free_gb": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Disk Free Gb"
+        },
+        "disk_total_gb": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Disk Total Gb"
+        },
         "running": {
           "default": 0,
           "title": "Running",

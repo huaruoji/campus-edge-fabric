@@ -28,6 +28,9 @@ class WorkerConfig:
     max_cpu_pct: float = field(default_factory=lambda: float(_env("CEF_MAX_CPU", "85") or 85))
     max_gpu_pct: float = field(default_factory=lambda: float(_env("CEF_MAX_GPU", "85") or 85))
     poll_interval_s: float = field(default_factory=lambda: float(_env("CEF_POLL_INTERVAL", "1.0") or 1.0))
+    #: stop taking new work when the scratch volume gets this low (GB).
+    #: the device belongs to a human - filling their disk is the worst failure mode.
+    min_free_gb: float = field(default_factory=lambda: float(_env("CEF_MIN_FREE_GB", "1.0") or 1.0))
     heartbeat_interval_s: float = 5.0
 
     def ensure_dirs(self) -> None:

@@ -10,6 +10,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 
 try:  # pragma: no cover - psutil is a hard dependency, keep import defensive
     import psutil
@@ -24,12 +25,16 @@ class Sample:
     gpu_pct: float | None = None
     gpu_mem_pct: float | None = None
     gpu_name: str | None = None
+    disk_free_gb: float | None = None
+    disk_total_gb: float | None = None
 
 
 class ResourceMonitor:
-    def __init__(self) -> None:
+    def __init__(self, data_dir: Path | None = None) -> None:
         self._nvidia = shutil.which("nvidia-smi")
         self._primed = False
+        # disk is measured on the volume that actually holds task scratch space
+        self._data_dir = data_dir or Path.home() / ".cef" / "worker"
 
     def probe_gpu(self) -> tuple[str | None, float | None]:
         if not self._nvidia:
@@ -54,6 +59,12 @@ class ResourceMonitor:
 
     def sample(self) -> Sample:
         s = Sample()
+        try:
+            usage = shutil.disk_usage(self._data_dir)
+            s.disk_free_gb = round(usage.free / 1e9, 2)
+            s.disk_total_gb = round(usage.total / 1e9, 2)
+        except OSError:
+            pass
         if psutil is not None:
             try:
                 # first call after import returns 0.0, prime it once

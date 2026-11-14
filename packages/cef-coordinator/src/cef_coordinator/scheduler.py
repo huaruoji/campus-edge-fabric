@@ -111,13 +111,17 @@ def heartbeat(
             (now, worker_id),
         )
         conn.execute(
-            "INSERT INTO worker_stats (worker_id, ts, cpu_pct, mem_pct, gpu_pct, running) VALUES (?,?,?,?,?,?)",
+            """INSERT INTO worker_stats (worker_id, ts, cpu_pct, mem_pct, gpu_pct,
+                                         disk_free_gb, disk_total_gb, running)
+               VALUES (?,?,?,?,?,?,?,?)""",
             (
                 worker_id,
                 now,
                 stats.get("cpu_pct"),
                 stats.get("mem_pct"),
                 stats.get("gpu_pct"),
+                stats.get("disk_free_gb"),
+                stats.get("disk_total_gb"),
                 int(stats.get("running") or 0),
             ),
         )
@@ -466,3 +470,68 @@ def forget_worker(db_path, worker_id: str) -> bool:
         conn.execute("DELETE FROM workers WHERE id=?", (worker_id,))
         _event(conn, "worker_forgotten", worker_id=worker_id)
     return True
+
+
+# ------------------------------------------------------------------ disk / gc
+def blob_usage(db_path) -> tuple[int, int]:
+    """(bytes, count) currently held by the blob store."""
+    conn = db.reading(db_path)
+    try:
+        row = db.one(conn, "SELECT COALESCE(SUM(size),0) b, COUNT(*) n FROM blobs")
+        return int(row["b"] or 0), int(row["n"] or 0)
+    finally:
+        conn.close()
+
+
+def referenced_blobs(conn) -> set[str]:
+    """Every sha still needed by some task (input or output)."""
+    keep: set[str] = set()
+    for row in db.rows(conn, "SELECT inputs, output, output_sha FROM tasks"):
+        try:
+            for ref in json.loads(row["inputs"] or "[]"):
+                if ref.get("sha256"):
+                    keep.add(ref["sha256"])
+        except ValueError:
+            pass
+        try:
+            payload = json.loads(row["output"] or "{}")
+            for f in payload.get("files", []):
+                if f.get("sha256"):
+                    keep.add(f["sha256"])
+        except ValueError:
+            pass
+        if row["output_sha"]:
+            keep.add(row["output_sha"])
+    return keep
+
+
+def gc_blobs(db_path, settings, blob_dir) -> tuple[int, int]:
+    """Delete blobs that are old AND no longer referenced by any task.
+
+    Returns (deleted_count, deleted_bytes). Safe to run while jobs are in flight:
+    anything a live task points at is kept, and queued tasks always have inputs.
+    """
+    cutoff = _now() - settings.blob_retention_days * 86400
+    deleted = 0
+    freed = 0
+    stale: list[tuple[str, int]] = []
+    with db.transaction(db_path) as conn:
+        keep = referenced_blobs(conn)
+        for row in db.rows(conn, "SELECT sha256, size FROM blobs WHERE created_at < ?", (cutoff,)):
+            if row["sha256"] not in keep:
+                stale.append((row["sha256"], int(row["size"] or 0)))
+        for sha, _size in stale:
+            conn.execute("DELETE FROM blobs WHERE sha256=?", (sha,))
+    for sha, size in stale:
+        path = blob_dir / sha[:2] / sha[2:4] / sha
+        try:
+            if path.exists():
+                path.unlink()
+                deleted += 1
+                freed += size
+        except OSError:
+            continue
+    if deleted:
+        with db.transaction(db_path) as conn:
+            _event(conn, "blobs_gc", message=f"deleted {deleted} blobs, {freed / 1e6:.1f} MB")
+    return deleted, freed

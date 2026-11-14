@@ -42,6 +42,13 @@ class Settings:
     #: keep worker utilization samples for this long (dashboard window)
     stats_retention_s: int = field(default_factory=lambda: _env_int("CEF_STATS_RETENTION", 6 * 3600))
     reaper_interval_s: float = field(default_factory=lambda: _env_float("CEF_REAPER_INTERVAL", 3.0))
+    #: hard ceiling for the blob store (inputs + outputs). The VPS disk is small and
+    #: inputs are content-addressed, so this is the only thing between us and a full disk.
+    blob_quota_gb: float = field(default_factory=lambda: _env_float("CEF_BLOB_QUOTA_GB", 6.0))
+    #: blobs not referenced by any task are deleted after this many days
+    blob_retention_days: float = field(default_factory=lambda: _env_float("CEF_BLOB_RETENTION_DAYS", 7.0))
+    #: per-file upload ceiling (MB) - one 4K raw photo should not become a job
+    max_upload_mb: float = field(default_factory=lambda: _env_float("CEF_MAX_UPLOAD_MB", 256.0))
 
     @property
     def db_path(self) -> Path:

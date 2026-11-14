@@ -81,6 +81,8 @@ CREATE TABLE IF NOT EXISTS worker_stats (
   cpu_pct   REAL,
   mem_pct   REAL,
   gpu_pct   REAL,
+  disk_free_gb  REAL,
+  disk_total_gb REAL,
   running   INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_wstats ON worker_stats(worker_id, ts);
@@ -135,8 +137,28 @@ def init_db(db_path: Path) -> None:
     try:
         with _WRITE_LOCK:
             conn.executescript(SCHEMA)
+            _migrate(conn)
     finally:
         conn.close()
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Additive migrations only: `CREATE TABLE IF NOT EXISTS` never alters an
+    existing DB, and a running pool must survive an upgrade without losing jobs."""
+    wanted = {
+        "worker_stats": {
+            "disk_free_gb": "REAL",
+            "disk_total_gb": "REAL",
+        },
+        "workers": {
+            "speed_s": "REAL",
+        },
+    }
+    for table, columns in wanted.items():
+        existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        for name, ddl in columns.items():
+            if name not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
 
 
 @contextmanager

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import sqlite3
 import tempfile
 import time
@@ -123,6 +124,25 @@ async def create_job(
     stored: list[tuple[str, str, int]] = []
     tasks: list[tuple[int, dict[str, Any], list[dict[str, Any]]]] = []
 
+    # disk guards: one oversized file or a full blob store must fail fast and
+    # legibly, not half-way through a job
+    max_file = int(s.max_upload_mb * 1e6)
+    used_bytes, _ = scheduler.blob_usage(s.db_path)
+    quota = int(s.blob_quota_gb * 1e9)
+
+    def _guard(size: int) -> None:
+        nonlocal used_bytes
+        if size > max_file:
+            raise _err(413, "file_too_large", f"file is {size / 1e6:.1f} MB, limit is {s.max_upload_mb:.0f} MB")
+        if used_bytes + size > quota:
+            raise _err(
+                507,
+                "storage_full",
+                f"blob store would reach {(used_bytes + size) / 1e9:.1f} GB of {s.blob_quota_gb:.1f} GB; "
+                "old results are garbage-collected after CEF_BLOB_RETENTION_DAYS",
+            )
+        used_bytes += size
+
     if job_spec.workload == "blender":
         if len(files) != 1:
             raise _err(400, "invalid_params", "blender jobs need exactly one .blend file")
@@ -130,7 +150,10 @@ async def create_job(
             frames = parse_frames(params["frames"])
         except InvalidParams as exc:
             raise _err(400, "invalid_params", str(exc)) from exc
+        if files[0].size is not None:
+            _guard(files[0].size)
         sha, name, size = await _spool(files[0], bs)
+        _guard(size)
         stored.append((sha, name, size))
         ref = {"sha256": sha, "name": name, "size": size}
         for i, frame in enumerate(frames):
@@ -141,7 +164,10 @@ async def create_job(
         if job_spec.inputs and len(job_spec.inputs) != len(files):
             raise _err(400, "invalid_params", "inputs[] length must match uploaded files")
         for i, upload in enumerate(files):
+            if upload.size is not None:
+                _guard(upload.size)
             sha, name, size = await _spool(upload, bs)
+            _guard(size)
             stored.append((sha, name, size))
             if job_spec.inputs:
                 name = job_spec.inputs[i].name or name
@@ -468,6 +494,8 @@ def list_workers(request: Request) -> WorkerList:
                     cpu_pct=stats["cpu_pct"] if stats else None,
                     mem_pct=stats["mem_pct"] if stats else None,
                     gpu_pct=stats["gpu_pct"] if stats else None,
+                    disk_free_gb=stats["disk_free_gb"] if stats else None,
+                    disk_total_gb=stats["disk_total_gb"] if stats else None,
                     running=stats["running"] if stats else 0,
                     completed_total=int(done["n"] or 0),
                     failed_total=int(failed["n"] or 0) if failed else 0,
@@ -765,3 +793,28 @@ def forget_worker(request: Request, worker_id: str) -> Response:
     if not scheduler.forget_worker(s.db_path, worker_id):
         raise _err(404, "not_found", f"worker {worker_id} not found")
     return Response(status_code=204)
+
+
+# -------------------------------------------------------------------- storage
+@router.get("/storage")
+def storage_usage(request: Request) -> dict[str, Any]:
+    """How much disk the pool is eating, and what the ceiling is."""
+    s = settings_of(request)
+    used, count = scheduler.blob_usage(s.db_path)
+    free_gb = total_gb = None
+    try:
+        usage = shutil.disk_usage(s.data_dir)
+        free_gb = round(usage.free / 1e9, 2)
+        total_gb = round(usage.total / 1e9, 2)
+    except OSError:
+        pass
+    return {
+        "blob_bytes": used,
+        "blob_count": count,
+        "quota_gb": s.blob_quota_gb,
+        "used_pct_of_quota": round(100 * used / (s.blob_quota_gb * 1e9), 1) if s.blob_quota_gb else None,
+        "retention_days": s.blob_retention_days,
+        "max_upload_mb": s.max_upload_mb,
+        "disk_free_gb": free_gb,
+        "disk_total_gb": total_gb,
+    }

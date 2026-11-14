@@ -122,6 +122,8 @@ class HeartbeatStats(_Model):
     cpu_pct: float | None = None
     mem_pct: float | None = None
     gpu_pct: float | None = None
+    disk_free_gb: float | None = None
+    disk_total_gb: float | None = None
     running: int = 0
 
 
@@ -202,6 +204,8 @@ class WorkerView(_Model):
     cpu_pct: float | None = None
     mem_pct: float | None = None
     gpu_pct: float | None = None
+    disk_free_gb: float | None = None
+    disk_total_gb: float | None = None
     running: int = 0
     completed_total: int = 0
     failed_total: int = 0

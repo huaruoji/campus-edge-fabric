@@ -142,6 +142,8 @@ docs/                 api.md（接口契约）、architecture.md（设计取舍�
 
 ## 6. 实验怎么测（比赛硬指标）
 
+**D 的已完成实验：[测试入口](docs/testing/README.md) · [Procedure](docs/testing/thumbnail-procedure.md) · [2026-11-14 Report](docs/testing/thumbnail-report-2026-11-14.md)。** 本次固定 thumbnail 对照完成 9 轮正式测量，900 个输出全部校验通过；双 Worker 中位吞吐 3.3055 images/s，相对最快单 Worker 提高 26.17%。该数据为包含上传与下载的服务吞吐，完整设备信息与限制见报告。复跑本次设计请用 `benchmarks/thumbnail/`，下方保留通用基准脚本的用法。
+
 ```bash
 # 每台设备先注册一个唯一 tag，用来做单机基线
 ./deploy/worker.sh ... --tags bench-pc1
@@ -173,7 +175,7 @@ uv run python benchmarks/bench.py \
 
 以上为四位技术成员；商业化另有一位成员负责，不作为当前技术交付前置条件。
 
-**当前交接状态见 [技术分工与交接表](docs/team-handoff.md)。** 本轮主要完成 A 的接口固定与整体联调，同时修复 B 的 Worker 心跳问题、补充 D 的自动化回归。B 的真实双机部署、C 的页面专项验收、D 的跨设备性能验证仍需继续；本机双进程测试不等于真实双机验收。
+**当前交接状态见 [技术分工与交接表](docs/team-handoff.md)。** A 的接口固定与整体联调、B 的 Worker 心跳修复及 D 的自动化回归已记录；D 新增了两个在线 Worker 的 thumbnail 正确性与单机/双 Worker 性能报告。B 仍需补齐物理设备与硬件确认，C 的页面专项验收、真实故障恢复等工作继续；本机双进程测试不等于真实双机验收。
 
 接口改动只走 `packages/cef-protocol` + `docs/api.md`，谁改谁先同步。
 

@@ -4,7 +4,7 @@ Security model: the coordinator can only name a recipe from PROVISION_RECIPES.
 Every step below is code in this file, reviewed with the rest of the repo. There
 is no code path that turns an incoming string into a shell command.
 
-A worker only runs recipes it was started with \`--allow-provision ...\`; without
+A worker only runs recipes it was started with --allow-provision ...; without
 that flag it refuses and reports why.
 """
 

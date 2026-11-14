@@ -360,9 +360,9 @@ function WorkerCard({
     const controller = new AbortController();
     void (async () => {
       try {
-        const status = await api.getProvision(worker.worker_id, controller.signal);
+        const list = await api.getProvision(worker.worker_id, controller.signal);
         if (controller.signal.aborted) return;
-        setProvisionStatus(status);
+        setProvisionStatus(list[0] ?? null);
         setProvisionSupported(true);
       } catch (error) {
         if (controller.signal.aborted) return;

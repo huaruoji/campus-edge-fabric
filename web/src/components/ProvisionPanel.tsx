@@ -14,18 +14,19 @@ import "../chat.css";
 /**
  * 设备「配置环境」入口。
  *
- * 后端契约（POST/GET /api/v1/workers/{id}/provision）：
- * - POST {"recipe":"infer"|"blender","dry_run":true|false} → 202 表示已入队；
- * - 403 = 设备没有授权远程配置（设备所有者要用 --allow-provision 重启 worker）；
- * - 404 = 后端还没上线该接口，整个入口隐藏（由 WorkerCard 处理）；
- * - GET 返回 {state: queued|running|succeeded|failed, log, ...}，界面轮询到终态为止。
+ * 后端契约（实测 2026-11-14，cef.huaruoji.com）：
+ * - POST /api/v1/workers/{id}/provision {"recipe":"infer"|"blender","dry_run":bool}
+ *   → 202，立刻返回一条 {id,state:"queued"}；真正的执行由设备在下一次心跳领取。
+ * - GET 同路径 → {requests:[{id,recipe,dry_run,state,log,created_at,updated_at}]}（新→旧）。
+ * - 设备没有 --allow-provision 时仍会接单，但会回报 failed + log「device not authorised」。
+ * - 403 只可能来自反向代理/权限层；404 表示后端还没上线该接口，WorkerCard 隐藏入口。
  *
  * 前端无法判断某台设备是否被授权，所以按钮默认 disabled，只有用户明确勾选
- * 「设备所有者已授权」后才可点击；真正的授权校验仍然由后端 403 兜底。
+ * 「设备所有者已授权」后才能点击；真正的授权校验由设备和后端兜底。
  */
 
 const POLL_MS = 2500;
-/** 超过这个时长就不再自动轮询，避免页面开着挂后台请求。 */
+/** 超过这个时长就不再自动轮询，避免页面开着挂一堆请求。 */
 const POLL_BUDGET_MS = 10 * 60 * 1000;
 
 const STATE_LABELS: Record<ProvisionState, string> = {
@@ -44,7 +45,7 @@ function isTerminal(state: ProvisionState): boolean {
   return state === "succeeded" || state === "failed";
 }
 
-/** 设备是否授权远程配置：仅 403 说明「接口存在但没授权」，其他错误不改变结论。 */
+/** 设备拒绝了这次请求：只有「接口存在但没授权」才算，其他错误不改变结论。 */
 export function provisionSupportedFromError(error: unknown): boolean | null {
   if (error instanceof CefApiError) {
     if (error.kind === "not_found") return false;
@@ -53,19 +54,9 @@ export function provisionSupportedFromError(error: unknown): boolean | null {
   return null;
 }
 
-function describeError(error: unknown): string {
-  if (error instanceof CefApiError) {
-    if (error.status === 403) {
-      return "这台设备没有授权远程配置。请在目标设备上用 --allow-provision infer,blender 重启 worker，再回来重试。";
-    }
-    if (error.status === 404) {
-      return "后端还没提供配置环境接口（404），入口已隐藏。";
-    }
-    if (error.status === 409) {
-      return "该设备已有配置任务在跑，等它结束再试。";
-    }
-  }
-  return "";
+/** 设备回报的「未授权」在 log 里，不是 HTTP 状态码。 */
+function refusedByDevice(status: ProvisionStatus): boolean {
+  return status.log.some((line) => /not authori[sz]ed/i.test(line));
 }
 
 export function ProvisionPanel({
@@ -92,8 +83,11 @@ export function ProvisionPanel({
   const recipeId = useId();
   const dryRunId = useId();
   const authorizedId = useId();
+  const disabledHintId = useId();
   const timerRef = useRef<number | undefined>(undefined);
   const startedAtRef = useRef<number>(0);
+  const statusRef = useRef<ProvisionStatus | null>(initialStatus);
+  statusRef.current = status;
 
   const stopPolling = useCallback(() => {
     if (timerRef.current !== undefined) {
@@ -105,13 +99,26 @@ export function ProvisionPanel({
 
   const pollOnce = useCallback(async () => {
     try {
-      const next = await api.getProvision(worker.worker_id);
-      setStatus(next);
+      const list = await api.getProvision(worker.worker_id);
+      const current = statusRef.current;
+      const next = (current?.id ? list.find((item) => item.id === current.id) : undefined) ?? list[0] ?? null;
       setError(null);
+      if (!next) {
+        stopPolling();
+        setNotice("设备还没有收到这条请求。确认设备在线、并且是最新版本的 worker。");
+        return;
+      }
+      setStatus(next);
       if (isTerminal(next.state)) {
         stopPolling();
         onRefresh();
-        setNotice(next.state === "succeeded" ? "设备已完成环境配置。" : "设备配置失败，请查看下面的日志。");
+        if (next.state === "succeeded") {
+          setNotice(next.dry_run ? "预演完成，这台设备可以跑这个配置。" : "设备已完成环境配置。");
+        } else if (refusedByDevice(next)) {
+          setNotice("设备拒绝执行：没有授权远程配置。");
+        } else {
+          setNotice("设备报告配置失败，请查看下面的日志。");
+        }
         return;
       }
     } catch (cause) {
@@ -122,6 +129,7 @@ export function ProvisionPanel({
     if (Date.now() - startedAtRef.current > POLL_BUDGET_MS) {
       stopPolling();
       setNotice("已停止自动刷新。稍后点「刷新状态」继续查看。");
+      return;
     }
   }, [api, onRefresh, stopPolling, worker.worker_id]);
 
@@ -132,10 +140,7 @@ export function ProvisionPanel({
     const tick = (): void => {
       timerRef.current = window.setTimeout(() => {
         void pollOnce().then(() => {
-          if (timerRef.current !== undefined) {
-            // pollOnce 里已经 stopPolling 时不会留下 timer。
-            tick();
-          }
+          timerRef.current = window.setTimeout(tick, POLL_MS);
         });
       }, POLL_MS);
     };
@@ -155,20 +160,12 @@ export function ProvisionPanel({
       const next = await api.provisionWorker(worker.worker_id, { recipe, dry_run: runDry });
       setStatus(next);
       if (isTerminal(next.state)) {
-        setNotice(
-          next.state === "succeeded"
-            ? runDry
-              ? "预演已完成，设备环境可以支持这个配置。"
-              : "设备已完成环境配置。"
-            : "设备报告配置失败，请查看下面的日志。"
-        );
-        if (next.state === "succeeded" && !runDry) onRefresh();
+        setNotice(next.state === "succeeded" ? "设备已完成环境配置。" : "设备报告配置失败，请查看下面的日志。");
       } else {
         setNotice(runDry ? "已请求预演，设备处理中…" : "已请求，设备处理中…");
         startPolling();
       }
     } catch (cause) {
-      setStatus(null);
       setError(cause);
     } finally {
       setRequesting(false);
@@ -179,14 +176,15 @@ export function ProvisionPanel({
   const disabledReason = !online
     ? "设备离线，无法请求远程配置。"
     : !authorized
-      ? "需要设备所有者预先授权：勾选下面的确认项才能请求。"
+      ? "需要设备所有者预先授权。"
       : "";
+  const refused = status ? refusedByDevice(status) : false;
 
   return (
     <div className="provision-panel">
       <div className="provision-head">
         <span className="provision-title">配置环境</span>
-        <span className="field-hint">由设备本机执行 provision recipe，Coordinator 只转发请求。</span>
+        <span className="field-hint">Coordinator 只转发 recipe 名字，命令由设备本机的固定脚本执行。</span>
       </div>
 
       <div className="provision-controls">
@@ -210,7 +208,7 @@ export function ProvisionPanel({
             onChange={(event) => setDryRun(event.target.checked)}
             disabled={requesting}
           />
-          先预演（dry_run，不改动设备）
+          先预演（dry_run，不安装任何东西）
         </label>
       </div>
 
@@ -232,7 +230,7 @@ export function ProvisionPanel({
           onClick={() => void request(dryRun)}
           disabled={!canRequest}
           title={disabledReason || (dryRun ? "在设备上预演一次配置，不落盘" : "在设备上真正执行配置")}
-          aria-describedby={disabledReason ? "provision-disabled-" + worker.worker_id : undefined}
+          aria-describedby={disabledReason ? disabledHintId : undefined}
         >
           {requesting ? "请求中…" : dryRun ? "预演配置" : "执行配置"}
         </button>
@@ -253,19 +251,24 @@ export function ProvisionPanel({
       </div>
 
       {disabledReason ? (
-        <p className="provision-hint" id={"provision-disabled-" + worker.worker_id}>
+        <p className="provision-hint" id={disabledHintId}>
           {disabledReason}
-          {!authorized ? " 授权的含义：设备所有者用 --allow-provision " + recipe + " 重启 worker。" : ""}
+          {!authorized ? " 授权的做法：设备所有者在目标设备上用 --allow-provision infer,blender 重启 worker。" : ""}
         </p>
       ) : null}
 
       {error ? (
-        <div className="provision-error" role="alert">
+        <div className="provision-error">
           <ErrorBox error={error} compact />
-          {describeError(error) ? <p className="provision-hint">{describeError(error)}</p> : null}
         </div>
       ) : null}
       {notice ? <div className="notice" role="status" aria-live="polite">{notice}</div> : null}
+
+      {refused ? (
+        <p className="provision-hint provision-hint--err">
+          这台设备没有授权远程配置。请在目标设备上确认 worker 启动时带了 --allow-provision infer,blender，然后重试。
+        </p>
+      ) : null}
 
       {status ? (
         <div className="provision-status">
@@ -279,11 +282,12 @@ export function ProvisionPanel({
               {status.updated_at ? " · 更新于 " + formatClock(status.updated_at * 1000) : ""}
             </span>
           </div>
-          {status.error ? <p className="provision-hint provision-hint--err">{status.error}</p> : null}
           {status.log.length > 0 ? (
             <pre className="provision-log">{status.log.join("\n")}</pre>
           ) : (
-            <p className="provision-hint">还没有日志输出。</p>
+            <p className="provision-hint">
+              {status.state === "queued" ? "还没有设备领取这条请求；设备下一次心跳会接走它。" : "还没有日志输出。"}
+            </p>
           )}
         </div>
       ) : null}

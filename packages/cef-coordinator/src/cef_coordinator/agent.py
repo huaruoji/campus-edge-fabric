@@ -179,17 +179,20 @@ def _dispatch(name: str, args: dict[str, Any], ctx: AgentChatRequest, port: int,
                 count = len(parse_frames(str(params["frames"])))
             elif ctx.context.files:
                 count = len(ctx.context.files)
-            note = (
-                f"将以界面已上传的 {len(ctx.context.files)} 个文件为输入，拆成 {count} 个任务"
-                if ctx.context.files
-                else "尚未上传输入文件；在界面上传后点确认即可提交"
-            )
+            dataset = (ctx.context.dataset or "").strip() or None
+            if dataset:
+                note = f"输入来自数据集 {dataset}，确认后无需上传文件即可提交"
+            elif ctx.context.files:
+                note = f"将以界面已上传的 {len(ctx.context.files)} 个文件为输入，拆成 {count} 个任务"
+            else:
+                note = "尚未选择数据集或上传文件；选好之后点确认即可提交"
             return {
                 "workload": workload,
                 "params": params,
                 "task_count": count,
                 "note": note,
                 "unit": WORKLOAD_UNITS.get(workload, "tasks"),
+                "dataset": dataset,
             }
         raise AgentError(f"unknown tool: {name}")
     finally:

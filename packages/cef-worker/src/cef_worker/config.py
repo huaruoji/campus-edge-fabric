@@ -31,6 +31,9 @@ class WorkerConfig:
     #: stop taking new work when the scratch volume gets this low (GB).
     #: the device belongs to a human - filling their disk is the worst failure mode.
     min_free_gb: float = field(default_factory=lambda: float(_env("CEF_MIN_FREE_GB", "1.0") or 1.0))
+    #: recipes the coordinator may trigger on this device. Empty = refuse everything.
+    #: This is the owner's consent switch; without it a provision request is rejected.
+    allow_provision: list[str] = field(default_factory=lambda: [p.strip() for p in (_env("CEF_ALLOW_PROVISION", "") or "").split(",") if p.strip()])
     heartbeat_interval_s: float = 5.0
 
     def ensure_dirs(self) -> None:

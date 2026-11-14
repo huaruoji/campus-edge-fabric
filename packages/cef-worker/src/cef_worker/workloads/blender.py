@@ -60,7 +60,7 @@ class BlenderWorkload(Workload):
             version = (out.stdout or "").strip().splitlines()[0] if out.stdout else "unknown"
         except Exception as exc:  # noqa: BLE001
             return {"kind": self.kind, "available": False, "version": None, "reason": f"{exc}"}
-        return {"kind": self.kind, "available": True, "version": version, "reason": None}
+        return {"kind": self.kind, "available": True, "version": version, "reason": None, "engine": "CYCLES"}
 
     def run(self, ctx: TaskContext) -> TaskResult:
         exe = self._resolve()

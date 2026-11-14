@@ -108,6 +108,18 @@ CREATE TABLE IF NOT EXISTS blobs (
   created_at REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS provision_requests (
+  id         TEXT PRIMARY KEY,
+  worker_id  TEXT NOT NULL,
+  recipe     TEXT NOT NULL,
+  dry_run    INTEGER NOT NULL DEFAULT 1,
+  state      TEXT NOT NULL DEFAULT 'queued',
+  log        TEXT,
+  created_at REAL NOT NULL,
+  updated_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_provision_worker ON provision_requests(worker_id, state);
+
 CREATE TABLE IF NOT EXISTS datasets (
   id          TEXT PRIMARY KEY,
   name        TEXT UNIQUE NOT NULL,

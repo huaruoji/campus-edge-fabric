@@ -5,6 +5,8 @@ import type {
   AgentToolTrace,
   ApiClient,
   ChatMessage,
+  DatasetSummary,
+  JobSpec,
   ServerChatMessage,
   TagStat,
   Workload,
@@ -24,8 +26,47 @@ const CHAT_PAGE_LIMIT = 200;
 const MAX_CONTEXT_MESSAGES = 12;
 /** 作为上下文带给服务端的文件数上限。 */
 const MAX_CONTEXT_FILES = 200;
+/** 数据集列表轮询间隔（毫秒）：数据集不会频繁变动，拉慢一点。 */
+const DATASET_POLL_MS = 30000;
 const NICKNAME_KEY = "cef.nickname";
 const DEFAULT_NICKNAME = "队友";
+
+/** 数据来源：已登记数据集 / 手动上传文件，二选一。 */
+type DataSource = "dataset" | "files";
+
+function formatBytes(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined || !Number.isFinite(bytes) || bytes < 0) return "—";
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+/** 复制文本：优先 Clipboard API，非安全上下文退回 execCommand。 */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // 退回到选中复制。
+  }
+  try {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.top = "-1000px";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand("copy");
+    area.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
 
 interface ChatEntry extends ServerChatMessage {
   /** 仅本地乐观气泡使用：pending=请求进行中，failed=发送失败可重试。 */

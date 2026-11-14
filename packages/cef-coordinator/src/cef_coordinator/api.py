@@ -44,6 +44,11 @@ from cef_protocol.models import (
     PollRequest,
     PollResponse,
     PoolStats,
+    ProvisionAsk,
+    ProvisionList,
+    ProvisionRequest,
+    ProvisionResult,
+    ProvisionStatus,
     RegisterRequest,
     RegisterResponse,
     TagList,
@@ -61,7 +66,14 @@ from cef_protocol.models import (
 )
 from cef_protocol.states import JobState, TaskState
 from cef_protocol.tags import categorize, normalize_tags
-from cef_protocol.workloads import WORKLOAD_UNITS, InvalidParams, param_schema, parse_frames, validate_params
+from cef_protocol.workloads import (
+    PROVISION_RECIPES,
+    WORKLOAD_UNITS,
+    InvalidParams,
+    param_schema,
+    parse_frames,
+    validate_params,
+)
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 
@@ -412,6 +424,7 @@ def worker_heartbeat(request: Request, worker_id: str, hb: HeartbeatRequest) -> 
         lease_ttl_s=s.lease_ttl_s,
         poll_now=True,
         drain=row["state"] == "draining",
+        provision=_claim_provision(s, worker_id),
     )
 
 
@@ -1246,3 +1259,101 @@ def delete_dataset(request: Request, ref: str) -> Response:
             raise _err(404, "not_found", f"数据集 {ref} 不存在")
         conn.execute("DELETE FROM datasets WHERE id=?", (row["id"],))
     return Response(status_code=204)
+
+
+# ------------------------------------------------------------------ provision
+def _provision_row(row: sqlite3.Row) -> ProvisionStatus:
+    return ProvisionStatus(
+        id=row["id"],
+        worker_id=row["worker_id"],
+        recipe=row["recipe"],
+        dry_run=bool(row["dry_run"]),
+        state=row["state"],
+        log=row["log"] or "",
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
+
+
+def _claim_provision(s: Settings, worker_id: str) -> ProvisionAsk | None:
+    """Hand the oldest queued recipe to the worker on its next heartbeat."""
+    now = time.time()
+    with db.transaction(s.db_path) as conn:
+        row = db.one(
+            conn,
+            "SELECT * FROM provision_requests WHERE worker_id=? AND state='queued' ORDER BY created_at LIMIT 1",
+            (worker_id,),
+        )
+        if row is None:
+            return None
+        conn.execute("UPDATE provision_requests SET state='running', updated_at=? WHERE id=?", (now, row["id"]))
+    return ProvisionAsk(id=row["id"], recipe=row["recipe"], dry_run=bool(row["dry_run"]))
+
+
+@router.post("/workers/{worker_id}/provision", status_code=202, response_model=ProvisionStatus)
+def request_provision(request: Request, worker_id: str, body: ProvisionRequest) -> ProvisionStatus:
+    """Ask a device to prepare an environment.
+
+    This is the *only* remote-action surface: the payload is a recipe name from a
+    closed list. A worker that was not started with --allow-provision simply
+    refuses, and there is no way to express an arbitrary command here.
+    """
+    s = settings_of(request)
+    if body.recipe not in PROVISION_RECIPES:
+        raise _err(400, "invalid_recipe", f"未知 recipe: {body.recipe}（可选：{', '.join(PROVISION_RECIPES)}）")
+    now = time.time()
+    provision_id = new_id("prov")
+    with db.transaction(s.db_path) as conn:
+        worker = db.one(conn, "SELECT id FROM workers WHERE id=?", (worker_id,))
+        if worker is None:
+            raise _err(404, "not_found", f"worker {worker_id} 不存在")
+        conn.execute(
+            """INSERT INTO provision_requests (id, worker_id, recipe, dry_run, state, log, created_at, updated_at)
+               VALUES (?,?,?,?,'queued','',?,?)""",
+            (provision_id, worker_id, body.recipe, 1 if body.dry_run else 0, now, now),
+        )
+        conn.execute(
+            """INSERT INTO events (ts, kind, worker_id, message) VALUES (?,?,?,?)""",
+            (now, "provision_requested", worker_id, f"{body.recipe} dry_run={body.dry_run}"),
+        )
+        row = db.one(conn, "SELECT * FROM provision_requests WHERE id=?", (provision_id,))
+    return _provision_row(row)
+
+
+@router.get("/workers/{worker_id}/provision", response_model=ProvisionList)
+def list_provision(request: Request, worker_id: str) -> ProvisionList:
+    s = settings_of(request)
+    conn = db.reading(s.db_path)
+    try:
+        rows = db.rows(
+            conn,
+            "SELECT * FROM provision_requests WHERE worker_id=? ORDER BY created_at DESC LIMIT 20",
+            (worker_id,),
+        )
+    finally:
+        conn.close()
+    return ProvisionList(requests=[_provision_row(r) for r in rows])
+
+
+@router.post("/workers/{worker_id}/provision/{provision_id}/result", response_model=ProvisionStatus)
+def provision_result(request: Request, worker_id: str, provision_id: str, body: ProvisionResult) -> ProvisionStatus:
+    s = settings_of(request)
+    now = time.time()
+    with db.transaction(s.db_path) as conn:
+        row = db.one(
+            conn,
+            "SELECT * FROM provision_requests WHERE id=? AND worker_id=?",
+            (provision_id, worker_id),
+        )
+        if row is None:
+            raise _err(404, "not_found", "provision request 不存在")
+        conn.execute(
+            "UPDATE provision_requests SET state=?, log=?, updated_at=? WHERE id=?",
+            ("succeeded" if body.ok else "failed", body.log[:4000], now, provision_id),
+        )
+        conn.execute(
+            "INSERT INTO events (ts, kind, worker_id, message) VALUES (?,?,?,?)",
+            (now, "provision_finished", worker_id, f"{row['recipe']} ok={body.ok}"),
+        )
+        updated = db.one(conn, "SELECT * FROM provision_requests WHERE id=?", (provision_id,))
+    return _provision_row(updated)

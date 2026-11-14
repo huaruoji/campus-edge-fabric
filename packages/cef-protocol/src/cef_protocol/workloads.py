@@ -66,6 +66,12 @@ WORKLOAD_UNITS: dict[str, str] = {
 }
 
 
+#: The closed vocabulary of things a device may be asked to prepare. There is
+#: deliberately no "run this command" entry: the network picks a name, the device
+#: decides what that name does.
+PROVISION_RECIPES = ("infer", "blender")
+
+
 class InvalidParams(ValueError):
     pass
 

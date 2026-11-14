@@ -1,6 +1,6 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import type { ApiClient, TagStat, Worker, WorkerState } from "../api";
+import type { ApiClient, ProvisionStatus, TagStat, Worker, WorkerState, WorkloadSupport } from "../api";
 import {
   TAG_CATEGORY_LABELS,
   TAG_CATEGORY_ORDER,
@@ -10,6 +10,8 @@ import type { PollState } from "../hooks/usePolling";
 import { usePolling } from "../hooks/usePolling";
 import { formatDuration, formatNumber, formatPct, formatRelativeSeconds } from "../format";
 import { Bar, EmptyBox, ErrorBox, LoadingLine, Section, StateBadge, UpdatedInfo } from "./ui";
+import { ProvisionPanel, provisionSupportedFromError } from "./ProvisionPanel";
+import { workloadLabel } from "../presets";
 import "../chat.css";
 
 const TAG_FILTER_KEY = "cef.workers.tagFilter";
@@ -249,6 +251,82 @@ function WorkerTagList({ tags }: { tags: string[] }) {
   );
 }
 
+/** tags 里的 engine:cuda / engine:cpu 是给人看的分类；能力矩阵优先用 workloads[].engine。 */
+function engineFromTags(tags: string[]): string | null {
+  const tag = tags.find((item) => item.startsWith("engine:"));
+  return tag ? tag.slice("engine:".length) : null;
+}
+
+function modelText(models: WorkloadSupport["models"]): string {
+  if (models.length === 0) return "—";
+  return models.map((model) => model.name + " " + model.sha256.slice(0, 12)).join("、");
+}
+
+/**
+ * 环境能力矩阵：这台设备声明能跑哪些 workload、版本、引擎、模型 sha，
+ * 以及缺什么（available=false 时后端给出的 reason）。
+ * 老版本后端不返回 workloads[] 时整块隐藏。
+ */
+function CapabilityMatrix({ worker }: { worker: Worker }) {
+  const rows = worker.workloads ?? [];
+  if (rows.length === 0) return null;
+  const missing = rows.filter((row) => !row.available);
+  return (
+    <div className="worker-capabilities">
+      <div className="worker-capabilities-head">
+        <span className="worker-capabilities-title">环境能力</span>
+        <span className="field-hint">
+          {missing.length === 0
+            ? "声明的 " + rows.length + " 个 workload 全部可用"
+            : "缺 " + missing.length + " 项"}
+        </span>
+      </div>
+      <div className="capability-wrap">
+        <table className="capability-table" aria-label={worker.name + " 的环境能力"}>
+          <thead>
+            <tr>
+              <th>工作负载</th>
+              <th>版本</th>
+              <th>引擎</th>
+              <th>模型 sha</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.kind} className={row.available ? undefined : "capability-row--missing"}>
+                <td>{workloadLabel(row.kind)}</td>
+                <td className="mono">{row.version ?? "—"}</td>
+                <td>{row.engine ?? engineFromTags(worker.tags) ?? "—"}</td>
+                <td className="mono capability-model" title={row.models.map((model) => model.name + " " + model.sha256).join("\n")}>
+                  {modelText(row.models)}
+                </td>
+                <td>
+                  {row.available ? (
+                    <span className="badge badge--ok">可用</span>
+                  ) : (
+                    <span className="badge badge--warn">缺失</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {missing.length > 0 ? (
+        <ul className="worker-missing">
+          {missing.map((row) => (
+            <li key={row.kind}>
+              <span className="mono">{row.kind}</span>
+              {row.reason ? "：" + row.reason : "：设备没有说明原因"}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 function WorkerCard({
   worker,
   api,
@@ -266,7 +344,33 @@ function WorkerCard({
   const [tagSaving, setTagSaving] = useState(false);
   const [tagError, setTagError] = useState<unknown>(null);
   const [tagNotice, setTagNotice] = useState<string | null>(null);
+  const [provisionStatus, setProvisionStatus] = useState<ProvisionStatus | null>(null);
+  /** null = 还在探测；false = 后端没有该接口（隐藏入口）；true = 有接口，可请求。 */
+  const [provisionSupported, setProvisionSupported] = useState<boolean | null>(null);
+  const [showProvision, setShowProvision] = useState(false);
+  const probeRef = useRef(false);
   const tagInputId = useId();
+  const provisionPanelId = useId();
+
+  // 只在挂载后探测一次：GET /workers/{id}/provision。404 → 整个入口隐藏；
+  // 403 → 接口存在但设备没授权，入口保留（请求时后端会再次拒绝）。
+  useEffect(() => {
+    if (probeRef.current || !api.hasToken || worker.state === "offline") return;
+    probeRef.current = true;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const status = await api.getProvision(worker.worker_id, controller.signal);
+        if (controller.signal.aborted) return;
+        setProvisionStatus(status);
+        setProvisionSupported(true);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setProvisionSupported(provisionSupportedFromError(error));
+      }
+    })();
+    return () => controller.abort();
+  }, [api, worker.worker_id, worker.state]);
 
   async function forget() {
     if (removing || !window.confirm(`移除离线设备「${worker.name}」的记录？`)) return;
@@ -329,6 +433,17 @@ function WorkerCard({
         >
           {editingTags ? "收起标签" : "编辑标签"}
         </button>
+        {provisionSupported && !offline ? (
+          <button
+            type="button"
+            className="btn btn--sm btn--ghost"
+            onClick={() => setShowProvision((value) => !value)}
+            aria-expanded={showProvision}
+            aria-controls={provisionPanelId}
+          >
+            {showProvision ? "收起配置" : "配置环境"}
+          </button>
+        ) : null}
         {offline ? (
           <button
             type="button"
@@ -375,6 +490,8 @@ function WorkerCard({
 
       {worker.tags.length > 0 ? <WorkerTagList tags={worker.tags} /> : null}
 
+      <CapabilityMatrix worker={worker} />
+
       <div className="meters">
         <MeterRow label="CPU" value={worker.cpu_pct} tone="cpu" />
         <MeterRow label="内存" value={worker.mem_pct} tone="mem" />
@@ -399,6 +516,17 @@ function WorkerCard({
           <dd>{formatRelativeSeconds(worker.last_seen_s_ago)}</dd>
         </div>
       </dl>
+
+      {provisionSupported && showProvision ? (
+        <div id={provisionPanelId}>
+          <ProvisionPanel
+            api={api}
+            worker={worker}
+            initialStatus={provisionStatus}
+            onRefresh={onRefresh}
+          />
+        </div>
+      ) : null}
     </article>
   );
 }

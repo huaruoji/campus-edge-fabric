@@ -107,11 +107,21 @@ class JobList(_Model):
 
 
 # ---------------------------------------------------------------------- workers
+class ModelRef(_Model):
+    name: str
+    sha256: str = ""
+    size: int = 0
+
+
 class WorkloadSupport(_Model):
     kind: str
     available: bool = True
     version: str | None = None
     reason: str | None = None
+    #: what the device would actually use: cuda / cpu / CYCLES ...
+    engine: str | None = None
+    #: local model files, hashed so two devices can prove they run the same weights
+    models: list[ModelRef] = Field(default_factory=list)
 
 
 class RegisterRequest(_Model):
@@ -148,10 +158,44 @@ class HeartbeatRequest(_Model):
     leases: list[str] = Field(default_factory=list)
 
 
+class ProvisionAsk(_Model):
+    """A recipe the owner explicitly allowed this device to run."""
+
+    id: str
+    recipe: str
+    dry_run: bool = True
+
+
+class ProvisionRequest(_Model):
+    recipe: str
+    dry_run: bool = True
+
+
+class ProvisionStatus(_Model):
+    id: str
+    worker_id: str
+    recipe: str
+    dry_run: bool = True
+    state: str = "queued"  # queued | running | succeeded | failed
+    log: str = ""
+    created_at: float = 0.0
+    updated_at: float = 0.0
+
+
+class ProvisionList(_Model):
+    requests: list[ProvisionStatus] = Field(default_factory=list)
+
+
+class ProvisionResult(_Model):
+    ok: bool
+    log: str = ""
+
+
 class HeartbeatResponse(_Model):
     lease_ttl_s: int = 90
     poll_now: bool = True
     drain: bool = False
+    provision: ProvisionAsk | None = None
 
 
 class PollRequest(_Model):
@@ -342,6 +386,8 @@ class AgentFile(_Model):
 class AgentContext(_Model):
     files: list[AgentFile] = Field(default_factory=list)
     job_id: str | None = None
+    #: a registered dataset name/id; when present the job needs no uploads
+    dataset: str | None = None
 
 
 class AgentChatRequest(_Model):
@@ -356,6 +402,7 @@ class AgentPreview(_Model):
     params: dict[str, Any] = Field(default_factory=dict)
     task_count: int | None = None
     note: str = ""
+    dataset: str | None = None
 
 
 class AgentToolTrace(_Model):

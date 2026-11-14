@@ -48,6 +48,11 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--model-dir", default=None, help="where .onnx models live")
     run.add_argument("--blender", default=None, help="path to the blender binary")
     run.add_argument("--max-cpu", type=float, default=None, help="stop taking work above this CPU %%")
+    run.add_argument(
+        "--allow-provision",
+        default=None,
+        help="让它能被远程配置的环境（逗号分隔，可选 infer,blender；默认全拒绝）",
+    )
     run.add_argument("--log-level", default="info")
 
     join = sub.add_parser("join", help="alias of run")
@@ -86,6 +91,8 @@ def main(argv: list[str] | None = None) -> int:
         cfg.tags = _split(args.tags)
     if getattr(args, "workloads", None):
         cfg.workloads = _split(args.workloads)
+    if getattr(args, "allow_provision", None):
+        cfg.allow_provision = _split(args.allow_provision)
 
     logging.basicConfig(
         level=getattr(logging, str(getattr(args, "log_level", "info")).upper(), logging.INFO),

@@ -46,6 +46,32 @@ export interface Worker {
   completed_total?: number;
   mean_duration_s: number | null;
   throughput_per_min?: number;
+  failed_total?: number;
+  /**
+   * 该设备声明支持的 workload 与可用状态（GET /api/v1/workers 的 workloads[]）。
+   * 老版本后端不返回该字段，此时为 undefined，界面隐藏能力矩阵。
+   */
+  workloads?: WorkloadSupport[];
+}
+
+/** 设备上的一份模型权重：名字 + sha256（核对用，界面只显示前 12 位）。 */
+export interface WorkloadModel {
+  name: string;
+  sha256: string;
+}
+
+/** 单台设备对某个 workload 的支持情况。 */
+export interface WorkloadSupport {
+  kind: string;
+  available: boolean;
+  /** 运行时版本，例如 pillow-13.0.0、onnxruntime-1.23.2。 */
+  version: string | null;
+  /** 不可用时的原因，直接展示给用户。 */
+  reason: string | null;
+  /** 执行引擎（cuda / cpu）；后端字段上线前为 null，界面回退到 tags 的 engine: 分类。 */
+  engine: string | null;
+  /** 设备上已有的模型；后端字段上线前为空数组，界面不显示这一列。 */
+  models: WorkloadModel[];
 }
 
 export interface JobSummary {
@@ -162,6 +188,52 @@ export interface HealthResponse {
   workers_online?: number;
 }
 
+/* ---------------------------------- 数据集 ---------------------------------- */
+
+/** GET /api/v1/datasets 的一项：已登记的数据集（文件数、总体积由后端统计）。 */
+export interface DatasetSummary {
+  id: string;
+  /** 提交任务时 spec.dataset 用的名字。 */
+  name: string;
+  description: string | null;
+  /** 文件数。 */
+  count: number;
+  /** 总字节数。 */
+  bytes: number;
+  created_at: number;
+  updated_at: number;
+}
+
+/** GET /api/v1/datasets/{name-or-id}：比列表多一份文件清单。 */
+export interface DatasetDetail extends DatasetSummary {
+  files: BlobBrief[];
+}
+
+/* ------------------------------- 远程配置环境 ------------------------------- */
+
+export type ProvisionRecipe = "infer" | "blender";
+export type ProvisionState = "queued" | "running" | "succeeded" | "failed";
+
+/** POST /api/v1/workers/{id}/provision 的请求体。 */
+export interface ProvisionRequest {
+  recipe: ProvisionRecipe;
+  /** true 只演练不落盘；界面上作为独立的「预演」动作。 */
+  dry_run: boolean;
+}
+
+/** POST/GET /api/v1/workers/{id}/provision 的响应。 */
+export interface ProvisionStatus {
+  worker_id: string;
+  recipe: string;
+  state: ProvisionState;
+  dry_run: boolean;
+  /** 设备返回的日志行（后端可能给字符串，这里统一成行数组）。 */
+  log: string[];
+  updated_at: number | null;
+  /** 失败时的一句话原因。 */
+  error: string | null;
+}
+
 /** POST /api/v1/jobs 的 multipart 中的 spec 字段。 */
 export interface JobSpec {
   workload: string;
@@ -169,6 +241,8 @@ export interface JobSpec {
   name?: string;
   priority?: number;
   required_tag?: string | null;
+  /** 已登记数据集的名字或 id；设置后不再上传 files（两者互斥）。 */
+  dataset?: string;
   inputs: { name: string }[];
 }
 
@@ -185,7 +259,11 @@ export interface ChatMessage {
 
 export interface AgentChatRequest {
   messages: ChatMessage[];
-  context: { files: { name: string; size: number }[] };
+  context: {
+    files: { name: string; size: number }[];
+    /** 本次对话选定的已登记数据集；后端未支持时会被忽略，界面据此走手动上传。 */
+    dataset?: string | null;
+  };
   /** 发送者昵称（可空），服务端落库时作为消息作者。 */
   author?: string;
   /** 共享对话房间，默认 pool。 */
@@ -216,6 +294,8 @@ export interface AgentPreview {
   params: Record<string, unknown>;
   task_count: number | null;
   note: string;
+  /** 助手从 AgentContext.dataset 原样回填的数据集名；没有则为 null。 */
+  dataset: string | null;
 }
 
 export interface AgentToolTrace {
@@ -298,6 +378,7 @@ export interface ChatMessagesOptions {
 export type ApiErrorKind =
   | "network"
   | "unauthorized"
+  | "forbidden"
   | "not_found"
   | "conflict"
   | "invalid"
@@ -346,6 +427,11 @@ export function toUserMessage(error: unknown): UserMessage {
       };
     }
     switch (error.kind) {
+      case "forbidden":
+        return {
+          title: "没有权限执行该操作（403）",
+          detail: error.message || "该操作需要设备所有者预先授权。",
+        };
       case "network":
         return {
           title: "无法连接 Coordinator",
@@ -435,8 +521,31 @@ function isNotNull<T>(value: T | null): value is T {
   return value !== null;
 }
 
+function normalizeWorkloadModel(raw: unknown): WorkloadModel | null {
+  const r = asRecord(raw);
+  const sha = asString(r?.sha256) ?? asString(r?.sha);
+  if (!r || !sha) return null;
+  return { name: asString(r.name) ?? "模型", sha256: sha };
+}
+
+function normalizeWorkloadSupport(raw: unknown): WorkloadSupport | null {
+  const r = asRecord(raw);
+  const kind = asString(r?.kind);
+  if (!r || !kind) return null;
+  const modelsRaw = Array.isArray(r.models) ? r.models : [];
+  return {
+    kind,
+    available: r.available !== false,
+    version: asString(r.version) ?? null,
+    reason: asString(r.reason) ?? null,
+    engine: asString(r.engine) ?? null,
+    models: modelsRaw.map(normalizeWorkloadModel).filter(isNotNull),
+  };
+}
+
 function normalizeWorker(raw: unknown, index: number): Worker {
   const r = asRecord(raw) ?? {};
+  const workloadsRaw = Array.isArray(r.workloads) ? r.workloads : null;
   const workerId = asString(r.worker_id) ?? asString(r.id) ?? "worker-" + index;
   return {
     worker_id: workerId,
@@ -455,6 +564,58 @@ function normalizeWorker(raw: unknown, index: number): Worker {
     completed_total: asNumber(r.completed_total),
     mean_duration_s: asNumberOrNull(r.mean_duration_s),
     throughput_per_min: asNumber(r.throughput_per_min),
+    failed_total: asNumber(r.failed_total),
+    workloads: workloadsRaw ? workloadsRaw.map(normalizeWorkloadSupport).filter(isNotNull) : undefined,
+  };
+}
+
+function normalizeDatasetSummary(raw: unknown): DatasetSummary | null {
+  const r = asRecord(raw);
+  const name = asString(r?.name);
+  if (!r || !name) return null;
+  return {
+    id: asString(r.id) ?? name,
+    name,
+    description: asString(r.description) ?? null,
+    count: asNumber(r.count) ?? 0,
+    bytes: asNumber(r.bytes) ?? 0,
+    created_at: asNumber(r.created_at) ?? 0,
+    updated_at: asNumber(r.updated_at) ?? 0,
+  };
+}
+
+function normalizeDatasetDetail(raw: unknown): DatasetDetail {
+  const summary = normalizeDatasetSummary(raw);
+  if (!summary) throw new CefApiError("parse", "数据集详情响应缺少 name 字段。");
+  const r = asRecord(raw) ?? {};
+  const filesRaw = Array.isArray(r.files) ? r.files : [];
+  return { ...summary, files: filesRaw.map(normalizeBlobBrief).filter(isNotNull) };
+}
+
+const PROVISION_STATES: readonly ProvisionState[] = ["queued", "running", "succeeded", "failed"];
+
+function normalizeProvisionLog(raw: unknown): string[] {
+  if (typeof raw === "string") {
+    return raw.split(/\r?\n/).map((line) => line.trimEnd()).filter((line) => line.length > 0);
+  }
+  return asStringArray(raw);
+}
+
+function normalizeProvisionStatus(raw: unknown, fallback: { worker_id?: string; recipe?: string } = {}): ProvisionStatus {
+  const r = asRecord(raw);
+  if (!r) throw new CefApiError("parse", "环境配置接口返回的不是 JSON 对象。");
+  const stateRaw = asString(r.state) ?? asString(r.status);
+  return {
+    worker_id: asString(r.worker_id) ?? fallback.worker_id ?? "",
+    recipe: asString(r.recipe) ?? fallback.recipe ?? "",
+    state: (PROVISION_STATES as readonly string[]).includes(stateRaw ?? "")
+      ? (stateRaw as ProvisionState)
+      : "queued",
+    dry_run: r.dry_run === true,
+    // 常见字段名：log / logs；也接受 message。
+    log: normalizeProvisionLog(r.log ?? r.logs ?? r.message),
+    updated_at: asNumberOrNull(r.updated_at ?? r.finished_at ?? r.started_at),
+    error: asString(r.error) ?? asString(r.fail_reason) ?? null,
   };
 }
 
@@ -640,6 +801,7 @@ function normalizeAgentChat(raw: unknown): AgentChatResponse {
       params,
       task_count: count !== null && Number.isInteger(count) && count >= 0 ? count : null,
       note: asString(data.note) ?? "",
+      dataset: asString(data.dataset) ?? null,
     };
   }
 
@@ -684,6 +846,7 @@ function normalizePreview(raw: unknown): AgentPreview | null {
     params,
     task_count: count !== null && Number.isInteger(count) && count >= 0 ? count : null,
     note: asString(data.note) ?? "",
+    dataset: asString(data.dataset) ?? null,
   };
 }
 
@@ -774,6 +937,14 @@ export interface ApiClient {
   getWorkers(signal?: AbortSignal): Promise<Worker[]>;
   getStats(windowSeconds?: number, signal?: AbortSignal): Promise<StatsResponse>;
   getWorkloads(signal?: AbortSignal): Promise<Workload[]>;
+  /** GET /api/v1/datasets：已登记数据集列表（按 updated_at 倒序）。 */
+  listDatasets(signal?: AbortSignal): Promise<DatasetSummary[]>;
+  /** GET /api/v1/datasets/{name-or-id}：含文件清单。 */
+  getDataset(ref: string, signal?: AbortSignal): Promise<DatasetDetail>;
+  /** POST /api/v1/workers/{id}/provision：请求设备配置环境（202 表示已入队）。 */
+  provisionWorker(workerId: string, request: ProvisionRequest): Promise<ProvisionStatus>;
+  /** GET /api/v1/workers/{id}/provision：查询配置进度。接口未上线时抛 not_found。 */
+  getProvision(workerId: string, signal?: AbortSignal): Promise<ProvisionStatus>;
   listJobs(options?: ListJobsOptions, signal?: AbortSignal): Promise<JobSummary[]>;
   getJob(jobId: string, signal?: AbortSignal): Promise<JobDetail>;
   getChatMessages(options?: ChatMessagesOptions, signal?: AbortSignal): Promise<ChatPage>;
@@ -813,8 +984,10 @@ export function createApiClient(baseUrlRaw: string, tokenRaw: string): ApiClient
     const apiMessage = message ? "后端返回：" + message : "";
     switch (status) {
       case 401:
+        return new CefApiError("unauthorized", "认证失败（HTTP 401）。" + apiMessage, { status, code });
       case 403:
-        return new CefApiError("unauthorized", "认证失败（HTTP " + status + "）。" + apiMessage, { status, code });
+        // 403 不是 token 无效，而是「认证过了但没被授权」，两者提示必须分开。
+        return new CefApiError("forbidden", "没有权限（HTTP 403）。" + apiMessage, { status, code });
       case 404:
         return new CefApiError("not_found", "接口不存在（HTTP 404）。" + apiMessage, { status, code });
       case 409:
@@ -888,6 +1061,32 @@ export function createApiClient(baseUrlRaw: string, tokenRaw: string): ApiClient
       const r = asRecord(raw);
       const list = r && Array.isArray(r.workloads) ? r.workloads : [];
       return list.map(normalizeWorkload).filter(isNotNull);
+    },
+
+    async listDatasets(signal?: AbortSignal): Promise<DatasetSummary[]> {
+      const raw = await requestJson("/datasets", { method: "GET" }, signal);
+      const r = asRecord(raw);
+      const list = r && Array.isArray(r.datasets) ? r.datasets : [];
+      return list.map(normalizeDatasetSummary).filter(isNotNull);
+    },
+
+    async getDataset(ref: string, signal?: AbortSignal): Promise<DatasetDetail> {
+      const raw = await requestJson("/datasets/" + encodeURIComponent(ref), { method: "GET" }, signal);
+      return normalizeDatasetDetail(raw);
+    },
+
+    async provisionWorker(workerId: string, request: ProvisionRequest): Promise<ProvisionStatus> {
+      const raw = await requestJson("/workers/" + encodeURIComponent(workerId) + "/provision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recipe: request.recipe, dry_run: request.dry_run }),
+      });
+      return normalizeProvisionStatus(raw, { worker_id: workerId, recipe: request.recipe });
+    },
+
+    async getProvision(workerId: string, signal?: AbortSignal): Promise<ProvisionStatus> {
+      const raw = await requestJson("/workers/" + encodeURIComponent(workerId) + "/provision", { method: "GET" }, signal);
+      return normalizeProvisionStatus(raw, { worker_id: workerId });
     },
 
     async listJobs(options: ListJobsOptions = {}, signal?: AbortSignal): Promise<JobSummary[]> {

@@ -19,6 +19,31 @@ from typing import Any
 from .base import TaskContext, TaskResult, Workload, WorkloadError
 
 _SESSION_CACHE: dict[tuple[str, str], Any] = {}
+#: hashing a 12 MB model on every heartbeat would be silly; key on (path, mtime, size)
+_MODEL_HASH_CACHE: dict[tuple[str, float, int], dict[str, Any]] = {}
+
+
+def _model_ref(path: Path) -> dict[str, Any]:
+    import hashlib
+
+    try:
+        stat = path.stat()
+    except OSError:
+        return {"name": path.stem, "sha256": "", "size": 0}
+    key = (str(path), stat.st_mtime, stat.st_size)
+    cached = _MODEL_HASH_CACHE.get(key)
+    if cached:
+        return cached
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                digest.update(chunk)
+    except OSError:
+        return {"name": path.stem, "sha256": "", "size": stat.st_size}
+    ref = {"name": path.stem, "sha256": digest.hexdigest(), "size": stat.st_size}
+    _MODEL_HASH_CACHE[key] = ref
+    return ref
 
 
 class InferWorkload(Workload):
@@ -40,19 +65,24 @@ class InferWorkload(Workload):
                 "version": None,
                 "reason": f"onnxruntime/numpy missing ({exc}); pip install 'cef-worker[infer]'",
             }
-        models = sorted(p.stem for p in self.model_dir.glob("*.onnx"))
+        models = [_model_ref(p) for p in sorted(self.model_dir.glob("*.onnx"))]
+        providers = ort.get_available_providers()
+        engine = "cuda" if "CUDAExecutionProvider" in providers else "cpu"
         if not models:
             return {
                 "kind": self.kind,
                 "available": False,
                 "version": ort.__version__,
                 "reason": f"no .onnx model in {self.model_dir}",
+                "engine": engine,
+                "models": [],
             }
         return {
             "kind": self.kind,
             "available": True,
             "version": f"onnxruntime-{ort.__version__}",
             "reason": None,
+            "engine": engine,
             "models": models,
         }
 

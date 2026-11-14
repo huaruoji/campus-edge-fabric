@@ -73,6 +73,8 @@ class Agent:
                     "available": bool(spec.get("available")),
                     "version": spec.get("version"),
                     "reason": spec.get("reason"),
+                    "engine": spec.get("engine"),
+                    "models": spec.get("models") or [],
                 }
             )
         hostname = socket.gethostname()
@@ -146,6 +148,9 @@ class Agent:
                 resp = self.api.heartbeat(self.worker_id or "", body, active)
                 if resp.get("drain"):
                     self._drain_requested.set()
+                ask = resp.get("provision")
+                if ask:
+                    self._handle_provision(ask)
             except ApiError as exc:
                 if exc.status == 404:
                     log.warning("coordinator forgot this worker, re-registering")
@@ -201,6 +206,44 @@ class Agent:
             log.info("interrupted")
         finally:
             self.shutdown()
+
+    def _handle_provision(self, ask: dict[str, Any]) -> None:
+        """Run one allowlisted environment recipe on this device.
+
+        The network can only pick a name from PROVISION_RECIPES; nothing here
+        interpolates remote data into a command.
+        """
+        from .setup import run_recipe
+
+        recipe = str(ask.get("recipe") or "")
+        provision_id = str(ask.get("id") or "")
+        dry_run = bool(ask.get("dry_run", True))
+        if recipe not in self.cfg.allow_provision:
+            log.warning(
+                "refused provision %s: not allowed (start with --allow-provision %s)", recipe, recipe
+            )
+            try:
+                self.api.provision_result(
+                    self.worker_id or "",
+                    provision_id,
+                    ok=False,
+                    log=f"device not authorised: allowed={self.cfg.allow_provision or 'none'}",
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            return
+        log.info("running provision recipe %s (dry_run=%s)", recipe, dry_run)
+        result = run_recipe(recipe, self.cfg.model_dir, dry_run=dry_run)
+        log.info("provision %s -> ok=%s", recipe, result.ok)
+        try:
+            self.api.provision_result(self.worker_id or "", provision_id, ok=result.ok, log=result.log)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("could not report provision result: %s", exc)
+        if result.ok and not dry_run:
+            try:
+                self.register()  # capabilities changed
+            except Exception:  # noqa: BLE001
+                log.warning("re-register after provision failed")
 
     def _capacity(self) -> int:
         if self._stop.is_set() or self._drain_requested.is_set():

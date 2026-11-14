@@ -25,7 +25,13 @@ class ThumbnailWorkload(Workload):
             from PIL import Image  # noqa: F401
         except Exception as exc:  # noqa: BLE001
             return {"kind": self.kind, "available": False, "version": None, "reason": f"pillow missing: {exc}"}
-        return {"kind": self.kind, "available": True, "version": f"pillow-{PIL.__version__}", "reason": None}
+        return {
+            "kind": self.kind,
+            "available": True,
+            "version": f"pillow-{PIL.__version__}",
+            "reason": None,
+            "engine": "cpu",
+        }
 
     def run(self, ctx: TaskContext) -> TaskResult:
         try:

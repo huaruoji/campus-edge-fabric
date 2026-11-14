@@ -105,6 +105,10 @@ class WorkerAPI:
         response = self._call("POST", f"/workers/{worker_id}/tasks/{task_id}/fail", json=body)
         return FailResponse.model_validate(response.json()).model_dump()
 
+    def provision_result(self, worker_id: str, provision_id: str, ok: bool, log: str) -> dict[str, Any]:
+        body = {"ok": ok, "log": log[:4000]}
+        return self._call("POST", f"/workers/{worker_id}/provision/{provision_id}/result", json=body).json()
+
     def drain(self, worker_id: str) -> None:
         response = self._call("POST", f"/workers/{worker_id}/drain")
         DrainResponse.model_validate(response.json())

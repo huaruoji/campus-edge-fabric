@@ -227,6 +227,17 @@
           "default": false,
           "title": "Drain",
           "type": "boolean"
+        },
+        "provision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProvisionAsk"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "title": "HeartbeatResponse",
@@ -358,6 +369,29 @@
       "title": "Lease",
       "type": "object"
     },
+    "ModelRef": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "sha256": {
+          "default": "",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size": {
+          "default": 0,
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ModelRef",
+      "type": "object"
+    },
     "PollRequest": {
       "properties": {
         "capacity": {
@@ -401,6 +435,30 @@
         }
       },
       "title": "PollResponse",
+      "type": "object"
+    },
+    "ProvisionAsk": {
+      "description": "A recipe the owner explicitly allowed this device to run.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "recipe": {
+          "title": "Recipe",
+          "type": "string"
+        },
+        "dry_run": {
+          "default": true,
+          "title": "Dry Run",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "recipe"
+      ],
+      "title": "ProvisionAsk",
       "type": "object"
     },
     "RegisterRequest": {
@@ -534,6 +592,25 @@
           ],
           "default": null,
           "title": "Reason"
+        },
+        "engine": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Engine"
+        },
+        "models": {
+          "items": {
+            "$ref": "#/$defs/ModelRef"
+          },
+          "title": "Models",
+          "type": "array"
         }
       },
       "required": [

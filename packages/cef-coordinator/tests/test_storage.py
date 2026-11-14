@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import json
-import time
 
-import pytest
 from cef_coordinator import db, scheduler
 from cef_coordinator.app import create_app
 from cef_coordinator.config import Settings

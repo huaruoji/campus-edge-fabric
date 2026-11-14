@@ -143,7 +143,12 @@ export default function App() {
             hint="填写 Token 并应用后，即可查看设备、提交任务与查看任务详情。若后端尚未启动，页面会显示明确的连接失败提示，而不是白屏。"
           />
         ) : route.name === "devices" ? (
-          <WorkerPanel workers={workers} onRefresh={workers.refresh} hideError={Boolean(bannerError)} />
+          <WorkerPanel
+            workers={workers}
+            api={api}
+            onRefresh={workers.refresh}
+            hideError={Boolean(bannerError)}
+          />
         ) : route.name === "submit" ? (
           <JobSubmitForm
             api={api}

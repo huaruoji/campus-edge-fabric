@@ -1,16 +1,17 @@
-import type { Worker } from "../api";
+import type { ApiClient, Worker } from "../api";
 import type { PollState } from "../hooks/usePolling";
 import { formatDuration, formatNumber, formatPct, formatRelativeSeconds } from "../format";
 import { Bar, EmptyBox, ErrorBox, LoadingLine, Section, StateBadge, UpdatedInfo } from "./ui";
 
 interface Props {
   workers: PollState<Worker[]>;
+  api: ApiClient;
   onRefresh: () => void;
   /** 页面顶部已有全局错误横幅时，不再重复渲染同一条错误。 */
   hideError?: boolean;
 }
 
-export function WorkerPanel({ workers, onRefresh, hideError = false }: Props) {
+export function WorkerPanel({ workers, api, onRefresh, hideError = false }: Props) {
   const list = workers.data ?? [];
   return (
     <Section
@@ -46,7 +47,7 @@ export function WorkerPanel({ workers, onRefresh, hideError = false }: Props) {
       {list.length > 0 ? (
         <div className="worker-grid">
           {list.map((worker) => (
-            <WorkerCard key={worker.worker_id} worker={worker} />
+            <WorkerCard key={worker.worker_id} worker={worker} api={api} onRemoved={onRefresh} />
           ))}
         </div>
       ) : null}
@@ -54,8 +55,26 @@ export function WorkerPanel({ workers, onRefresh, hideError = false }: Props) {
   );
 }
 
-function WorkerCard({ worker }: { worker: Worker }) {
+function WorkerCard({
+  worker,
+  api,
+  onRemoved,
+}: {
+  worker: Worker;
+  api: ApiClient;
+  onRemoved: () => void;
+}) {
   const offline = worker.state === "offline";
+
+  async function forget() {
+    if (!window.confirm("移除设备「" + worker.name + "」？它已离线，只会清掉这条记录。")) return;
+    try {
+      await api.forgetWorker(worker.worker_id);
+      onRemoved();
+    } catch (error) {
+      window.alert("移除失败：" + (error instanceof Error ? error.message : String(error)));
+    }
+  }
   return (
     <article className={"worker-card" + (offline ? " worker-card--offline" : "")}>
       <div className="worker-head">
@@ -64,6 +83,11 @@ function WorkerCard({ worker }: { worker: Worker }) {
           {worker.name}
         </h3>
         <StateBadge state={worker.state} kind="worker" />
+        {offline ? (
+          <button type="button" className="btn btn--sm btn--ghost" onClick={forget} title="删除这条离线记录">
+            移除
+          </button>
+        ) : null}
       </div>
 
       <div className="worker-meta">

@@ -103,8 +103,23 @@ CREATE TABLE IF NOT EXISTS blobs (
   sha256     TEXT PRIMARY KEY,
   size       INTEGER NOT NULL,
   path       TEXT NOT NULL,
+  mime       TEXT,
+  name       TEXT,
   created_at REAL NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id         TEXT PRIMARY KEY,
+  room       TEXT NOT NULL DEFAULT 'pool',
+  role       TEXT NOT NULL,
+  author     TEXT NOT NULL DEFAULT '',
+  content    TEXT NOT NULL,
+  trace      TEXT,
+  preview    TEXT,
+  job_id     TEXT,
+  created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chat_room ON chat_messages(room, created_at);
 
 CREATE TABLE IF NOT EXISTS events (
   id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -153,12 +168,40 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "workers": {
             "speed_s": "REAL",
         },
+        "blobs": {
+            "mime": "TEXT",
+            "name": "TEXT",
+        },
     }
     for table, columns in wanted.items():
         existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
         for name, ddl in columns.items():
             if name not in existing:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+    _normalize_existing_tags(conn)
+
+
+def _normalize_existing_tags(conn: sqlite3.Connection) -> None:
+    """One-time cleanup: tags written before normalisation existed (GPU, 'gpu ',
+    gpu_x) are rewritten to the canonical form. Idempotent and quiet once done."""
+    import json
+
+    from cef_protocol.tags import normalize_tags
+
+    changed = 0
+    for row in conn.execute("SELECT id, tags FROM workers").fetchall():
+        try:
+            current = json.loads(row[1] or "[]")
+        except ValueError:
+            current = []
+        fixed, _rejected = normalize_tags(current)
+        if fixed != current:
+            conn.execute("UPDATE workers SET tags=? WHERE id=?", (json.dumps(fixed), row[0]))
+            changed += 1
+    if changed:
+        import logging
+
+        logging.getLogger("cef.db").info("normalised tags on %d worker row(s)", changed)
 
 
 @contextmanager

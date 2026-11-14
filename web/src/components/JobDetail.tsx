@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import type { ApiClient } from "../api";
+import { CefApiError, type ApiClient } from "../api";
 import { usePolling } from "../hooks/usePolling";
 import {
+  clampPct,
   formatDuration,
   formatEta,
   formatNumber,
@@ -18,6 +19,7 @@ import {
   Pagination,
   Section,
   StateBadge,
+  stateLabel,
   UpdatedInfo,
 } from "./ui";
 
@@ -25,15 +27,14 @@ interface Props {
   api: ApiClient;
   jobId: string;
   onBack: () => void;
-  /** 页面顶部已有全局错误横幅时，不再重复渲染同一条错误。 */
-  hideError?: boolean;
+  connectionError: CefApiError | null;
 }
 
 /**
  * 任务详情：GET /api/v1/jobs/{id}，2 秒轮询直到离开页面。
  * 展示进度、ETA、per_worker 分解、任务明细（分页），并提供结果包下载。
  */
-export function JobDetail({ api, jobId, onBack, hideError = false }: Props) {
+export function JobDetail({ api, jobId, onBack, connectionError }: Props) {
   const poll = usePolling((signal) => api.getJob(jobId, signal), 2000, api.hasToken, [api, jobId]);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(20);
@@ -46,6 +47,8 @@ export function JobDetail({ api, jobId, onBack, hideError = false }: Props) {
   const tasks = job?.tasks ?? [];
   const progress = job ? jobProgress(job) : { done: 0, total: 0, pct: 0 };
   const terminal = job ? isTerminalJobState(job.state) : false;
+  const repeatsConnectionError = poll.error instanceof CefApiError
+    && poll.error.kind === connectionError?.kind && poll.error.code === connectionError?.code;
 
   useEffect(() => {
     const maxPage = Math.max(0, Math.ceil(tasks.length / pageSize) - 1);
@@ -66,7 +69,7 @@ export function JobDetail({ api, jobId, onBack, hideError = false }: Props) {
       anchor.click();
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 10000);
-      setNotice("结果包已开始下载：" + filename + "（含 manifest.json 与 outputs/）");
+      setNotice("已开始下载 " + filename);
     } catch (cause) {
       setActionError(cause);
     } finally {
@@ -82,7 +85,7 @@ export function JobDetail({ api, jobId, onBack, hideError = false }: Props) {
     setCanceling(true);
     try {
       await api.cancelJob(jobId);
-      setNotice("已发送取消请求（202），等待调度器收敛状态…");
+      setNotice("已发送取消请求，正在更新任务状态。");
       poll.refresh();
     } catch (cause) {
       setActionError(cause);
@@ -91,7 +94,7 @@ export function JobDetail({ api, jobId, onBack, hideError = false }: Props) {
     }
   }
 
-  const durationTotal = (job?.per_worker ?? []).reduce((sum, row) => sum + (row.total_duration_s ?? 0), 0);
+  const completedTotal = job?.succeeded ?? job?.per_worker.reduce((sum, row) => sum + row.completed, 0);
   const pageTasks = tasks.slice(page * pageSize, page * pageSize + pageSize);
 
   return (
@@ -111,7 +114,7 @@ export function JobDetail({ api, jobId, onBack, hideError = false }: Props) {
             className="btn btn--sm btn--primary"
             onClick={() => void handleDownload()}
             disabled={downloading || !job || !terminal}
-            title={terminal ? "下载 /api/v1/jobs/{id}/result 结果包" : "任务结束后才能下载结果包"}
+            title={terminal ? "下载结果包" : "任务结束后才能下载结果包"}
           >
             {downloading ? "下载中…" : "下载结果"}
           </button>
@@ -126,11 +129,11 @@ export function JobDetail({ api, jobId, onBack, hideError = false }: Props) {
         </div>
       </div>
 
-      {poll.error && !hideError ? (
+      {poll.error && !repeatsConnectionError ? (
         <ErrorBox error={poll.error} onRetry={poll.refresh} compact={Boolean(job)} />
       ) : null}
       {actionError ? <ErrorBox error={actionError} /> : null}
-      {notice ? <div className="notice">{notice}</div> : null}
+      {notice ? <div className="notice" role="status">{notice}</div> : null}
 
       {!job ? (
         poll.loading ? (
@@ -139,9 +142,9 @@ export function JobDetail({ api, jobId, onBack, hideError = false }: Props) {
           <EmptyBox
             title="任务详情不可用"
             hint={
-              hideError
-                ? "原因见页面顶部提示；修复后会自动恢复轮询。"
-                : "请检查任务 ID 是否正确，或返回任务列表刷新后重试。"
+              repeatsConnectionError
+                ? "请按上方提示检查连接，然后重新检测。"
+                : "返回任务列表可以查看当前可用的任务。"
             }
           />
         )
@@ -153,14 +156,15 @@ export function JobDetail({ api, jobId, onBack, hideError = false }: Props) {
             actions={<StateBadge state={job.state} kind="job" />}
           >
             <div className="progress-block">
-              <div className="progress progress--lg">
+              <div className="progress progress--lg" aria-hidden="true">
                 <span
                   className={"progress-fill progress-fill--" + job.state}
                   style={{ width: progress.pct + "%" }}
                 />
               </div>
-              <div className="progress-caption">
+              <div className="progress-caption" role="status" aria-live="polite" aria-atomic="true">
                 <span>
+                  <span className="visually-hidden">{stateLabel(job.state, "job")}。已成功 {job.succeeded ?? 0} 个，失败 {job.failed ?? 0} 个。</span>
                   {progress.done} / {progress.total} 个任务已处理
                 </span>
                 <span>{formatPct(progress.pct)}</span>
@@ -186,7 +190,7 @@ export function JobDetail({ api, jobId, onBack, hideError = false }: Props) {
               </div>
               <div className="kv">
                 <dt>预计剩余</dt>
-                <dd>{terminal ? "—" : formatEta(job.eta_s)}</dd>
+                <dd>{terminal ? "—" : job.eta_s == null ? "等待估算" : formatEta(job.eta_s)}</dd>
               </div>
               <div className="kv">
                 <dt>完成时间</dt>
@@ -197,12 +201,12 @@ export function JobDetail({ api, jobId, onBack, hideError = false }: Props) {
 
           <Section
             title="按设备分解"
-            subtitle="per_worker：每台设备实际完成的 Task 数与耗时占比"
+            subtitle="各设备完成的任务数、耗时和成功任务占比"
           >
             {job.per_worker.length === 0 ? (
-              <EmptyBox title="暂无设备处理记录" hint="任务尚未被 Worker 领取，或后端暂未返回 per_worker。" />
+              <EmptyBox title="暂无设备处理记录" hint="设备成功处理任务后，这里会显示它的完成量和耗时。" />
             ) : (
-              <div className="table-wrap">
+              <div className="table-wrap" role="region" aria-label="设备处理记录" tabIndex={0}>
                 <table className="data-table">
                   <thead>
                     <tr>
@@ -211,15 +215,14 @@ export function JobDetail({ api, jobId, onBack, hideError = false }: Props) {
                       <th className="num">平均耗时</th>
                       <th className="num">总耗时</th>
                       <th className="num">失败</th>
-                      <th>耗时占比</th>
+                      <th>完成占比</th>
                     </tr>
                   </thead>
                   <tbody>
                     {job.per_worker.map((row) => {
-                      const share =
-                        row.share !== undefined
-                          ? row.share * 100
-                          : sharePct(row.total_duration_s, durationTotal);
+                      const share = clampPct(
+                        row.share === undefined ? sharePct(row.completed, completedTotal) : row.share * 100,
+                      );
                       return (
                         <tr key={row.worker_id}>
                           <td>
@@ -232,7 +235,7 @@ export function JobDetail({ api, jobId, onBack, hideError = false }: Props) {
                           <td className="num">{formatNumber(row.failed)}</td>
                           <td>
                             <div className="share-cell">
-                              <div className="progress progress--sm">
+                              <div className="progress progress--sm" aria-hidden="true">
                                 <span
                                   className="progress-fill progress-fill--succeeded"
                                   style={{ width: (share ?? 0) + "%" }}
@@ -250,18 +253,19 @@ export function JobDetail({ api, jobId, onBack, hideError = false }: Props) {
             )}
           </Section>
 
-          <Section title="任务明细" subtitle={"共 " + tasks.length + " 条 · 每 2 秒随详情刷新"}>
+          <Section title="任务明细" subtitle={`共 ${tasks.length} 条`}>
             {tasks.length === 0 ? (
-              <EmptyBox title="暂无任务明细" hint="任务拆解完成后会显示每个 Task 的状态与耗时。" />
+              <EmptyBox title="暂无任务明细" hint="任务拆分后会显示每个子任务的状态与耗时。" />
             ) : (
               <>
-                <div className="table-wrap">
+                <div className="table-wrap" role="region" aria-label="子任务明细" tabIndex={0}>
                   <table className="data-table">
                     <thead>
                       <tr>
                         <th className="num">#</th>
-                        <th>Task ID</th>
+                        <th>子任务 ID</th>
                         <th>状态</th>
+                        <th>失败原因</th>
                         <th>设备</th>
                         <th className="num">尝试</th>
                         <th className="num">耗时</th>
@@ -277,6 +281,7 @@ export function JobDetail({ api, jobId, onBack, hideError = false }: Props) {
                           <td>
                             <StateBadge state={task.state} kind="task" />
                           </td>
+                          <td className="task-error">{task.error ?? "—"}</td>
                           <td>{task.worker_name ?? task.worker ?? "—"}</td>
                           <td className="num">{task.attempt ?? "—"}</td>
                           <td className="num">{formatDuration(task.duration_s)}</td>

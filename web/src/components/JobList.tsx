@@ -6,7 +6,6 @@ import { EmptyBox, ErrorBox, LoadingLine, Section, StateBadge, UpdatedInfo } fro
 
 interface Props {
   jobs: PollState<JobSummary[]>;
-  onOpen: (jobId: string) => void;
   onRefresh: () => void;
   /** 页面顶部已有全局错误横幅时，不再重复渲染同一条错误。 */
   hideError?: boolean;
@@ -22,18 +21,17 @@ const FILTER_OPTIONS: Array<{ value: JobState | "all"; label: string }> = [
   { value: "canceled", label: JOB_STATE_LABELS.canceled },
 ];
 
-export function JobList({ jobs, onOpen, onRefresh, hideError = false }: Props) {
+export function JobList({ jobs, onRefresh, hideError = false }: Props) {
   const [filter, setFilter] = useState<JobState | "all">("all");
   const all = jobs.data ?? [];
   const list = all
     .filter((job) => filter === "all" || job.state === filter)
-    .slice()
     .sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));
 
   return (
     <Section
       title="任务列表"
-      subtitle="GET /api/v1/jobs?limit=50 · 每 5 秒刷新 · 点击行查看详情"
+      subtitle={jobs.data ? `显示最近 ${all.length} 个作业` : undefined}
       actions={
         <>
           <UpdatedInfo updatedAt={jobs.updatedAt} />
@@ -64,19 +62,16 @@ export function JobList({ jobs, onOpen, onRefresh, hideError = false }: Props) {
 
       {!jobs.data && jobs.loading ? <LoadingLine text="正在读取任务列表…" /> : null}
       {!jobs.data && !jobs.loading && !jobs.error ? (
-        <EmptyBox title="暂无任务数据" hint="Coordinator 返回的空列表，或任务接口尚未就绪。" />
+        <EmptyBox title="暂无任务数据" hint="点击「刷新」重新获取任务列表。" />
       ) : null}
       {!jobs.data && jobs.error && hideError ? (
-        <EmptyBox title="任务列表暂不可用" hint="原因见页面顶部提示；修复后会自动恢复轮询。" />
+        <EmptyBox title="任务列表暂不可用" hint="请按上方提示检查连接，然后重新检测。" />
       ) : null}
       {jobs.data && all.length === 0 ? (
         <EmptyBox
           title="还没有提交过任务"
-          hint={
-            <>
-              去 <a href="#/submit">提交任务</a> 页选择 workload 并上传文件，创建后会出现在这里。
-            </>
-          }
+          hint="上传一批文件，用一句话描述要做的处理。确认后，任务会出现在这里。"
+          action={<a className="btn btn--sm btn--primary" href="#/submit">提交第一个任务</a>}
         />
       ) : null}
       {all.length > 0 && list.length === 0 ? (
@@ -84,7 +79,7 @@ export function JobList({ jobs, onOpen, onRefresh, hideError = false }: Props) {
       ) : null}
 
       {list.length > 0 ? (
-        <div className="table-wrap">
+        <div className="table-wrap" role="region" aria-label="任务列表" tabIndex={0}>
           <table className="data-table">
             <thead>
               <tr>
@@ -95,27 +90,17 @@ export function JobList({ jobs, onOpen, onRefresh, hideError = false }: Props) {
                 <th className="num">成功 / 失败</th>
                 <th>创建时间</th>
                 <th>完成时间</th>
-                <th aria-label="操作" />
               </tr>
             </thead>
             <tbody>
               {list.map((job) => {
                 const progress = jobProgress(job);
                 return (
-                  <tr
-                    key={job.job_id}
-                    className="row-clickable"
-                    tabIndex={0}
-                    onClick={() => onOpen(job.job_id)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        onOpen(job.job_id);
-                      }
-                    }}
-                  >
+                  <tr key={job.job_id}>
                     <td>
-                      <div className="cell-title">{job.name || "未命名任务"}</div>
+                      <a className="cell-title job-link" href={"#/jobs/" + encodeURIComponent(job.job_id)}>
+                        {job.name || "未命名任务"}
+                      </a>
                       <div className="cell-sub mono">{job.job_id}</div>
                     </td>
                     <td>{job.workload ?? "—"}</td>
@@ -124,7 +109,7 @@ export function JobList({ jobs, onOpen, onRefresh, hideError = false }: Props) {
                     </td>
                     <td>
                       <div className="progress-inline">
-                        <div className="progress progress--sm">
+                        <div className="progress progress--sm" aria-hidden="true">
                           <span
                             className={"progress-fill progress-fill--" + job.state}
                             style={{ width: progress.pct + "%" }}
@@ -140,18 +125,6 @@ export function JobList({ jobs, onOpen, onRefresh, hideError = false }: Props) {
                     </td>
                     <td className="nowrap">{formatUnix(job.created_at)}</td>
                     <td className="nowrap">{formatUnix(job.finished_at)}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="btn btn--sm btn--ghost"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onOpen(job.job_id);
-                        }}
-                      >
-                        详情
-                      </button>
-                    </td>
                   </tr>
                 );
               })}

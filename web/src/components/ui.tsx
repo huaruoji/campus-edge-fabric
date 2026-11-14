@@ -37,14 +37,16 @@ export function StateBadge({ state, kind }: { state: AnyState; kind: "job" | "ta
 }
 
 /** CPU / 内存 / GPU 百分比条。value 为 null 时显示空槽（表示无该指标）。 */
-export function Bar({ value, tone }: { value: number | null | undefined; tone: "cpu" | "mem" | "gpu" }) {
+export function Bar({ value, tone, label }: { value: number | null | undefined; tone: "cpu" | "mem" | "gpu"; label: string }) {
   const pct = clampPct(value);
   return (
     <div
       className={"meter meter--" + tone}
-      role="meter"
-      aria-valuemin={0}
-      aria-valuemax={100}
+      role={pct === null ? undefined : "meter"}
+      aria-hidden={pct === null ? true : undefined}
+      aria-label={pct === null ? undefined : label}
+      aria-valuemin={pct === null ? undefined : 0}
+      aria-valuemax={pct === null ? undefined : 100}
       aria-valuenow={pct === null ? undefined : Math.round(pct)}
     >
       {pct !== null ? <span className={"meter-fill meter-fill--" + tone} style={{ width: pct + "%" }} /> : null}
@@ -96,11 +98,12 @@ export function ErrorBox({
   );
 }
 
-export function EmptyBox({ title, hint }: { title: string; hint?: ReactNode }) {
+export function EmptyBox({ title, hint, action }: { title: string; hint?: ReactNode; action?: ReactNode }) {
   return (
     <div className="empty">
       <div className="empty-title">{title}</div>
       {hint ? <div className="empty-hint">{hint}</div> : null}
+      {action ? <div className="empty-action">{action}</div> : null}
     </div>
   );
 }

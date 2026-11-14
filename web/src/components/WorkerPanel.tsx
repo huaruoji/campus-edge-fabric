@@ -1,4 +1,5 @@
-import type { ApiClient, Worker } from "../api";
+import { useState } from "react";
+import type { ApiClient, Worker, WorkerState } from "../api";
 import type { PollState } from "../hooks/usePolling";
 import { formatDuration, formatNumber, formatPct, formatRelativeSeconds } from "../format";
 import { Bar, EmptyBox, ErrorBox, LoadingLine, Section, StateBadge, UpdatedInfo } from "./ui";
@@ -12,11 +13,13 @@ interface Props {
 }
 
 export function WorkerPanel({ workers, api, onRefresh, hideError = false }: Props) {
-  const list = workers.data ?? [];
+  const stateOrder: Record<WorkerState, number> = { online: 0, draining: 1, offline: 2 };
+  const list = [...(workers.data ?? [])].sort((a, b) => stateOrder[a.state] - stateOrder[b.state]);
+  const onlineCount = list.filter((worker) => worker.state === "online").length;
   return (
     <Section
-      title={"设备面板" + (workers.data ? " · " + list.length + " 台" : "")}
-      subtitle="每 3 秒轮询 GET /api/v1/workers；离线设备灰显。"
+      title="设备面板"
+      subtitle={workers.data ? `${onlineCount} 台在线 · ${list.length} 台已登记` : undefined}
       actions={
         <>
           <UpdatedInfo updatedAt={workers.updatedAt} />
@@ -32,24 +35,27 @@ export function WorkerPanel({ workers, api, onRefresh, hideError = false }: Prop
 
       {!workers.data && workers.loading ? <LoadingLine text="正在读取设备列表…" /> : null}
       {!workers.data && !workers.loading && !workers.error ? (
-        <EmptyBox title="暂无设备数据" hint="Worker 启动并注册后会出现在这里。" />
+        <EmptyBox title="暂无设备数据" hint="点击「刷新」重新获取设备列表。" />
       ) : null}
       {!workers.data && workers.error && hideError ? (
-        <EmptyBox title="设备数据暂不可用" hint="原因见页面顶部提示；修复后会自动恢复轮询，无需刷新页面。" />
+        <EmptyBox title="设备数据暂不可用" hint="请按上方提示检查连接，然后重新检测。" />
       ) : null}
       {workers.data && list.length === 0 ? (
         <EmptyBox
-          title="当前没有 Worker 注册"
-          hint="启动 worker agent（POST /api/v1/workers/register）后自动出现，心跳间隔约 5 秒。"
+          title="还没有设备加入"
+          hint="在队员的电脑上用上方的地址和 Token 启动 Worker。设备连接后会自动出现在这里。"
         />
       ) : null}
 
       {list.length > 0 ? (
-        <div className="worker-grid">
-          {list.map((worker) => (
-            <WorkerCard key={worker.worker_id} worker={worker} api={api} onRemoved={onRefresh} />
-          ))}
-        </div>
+        <>
+          {onlineCount === 0 ? <p className="notice notice--warn">当前没有在线设备。启动或重连一台 Worker 后，排队任务就可以继续处理。</p> : null}
+          <div className="worker-grid">
+            {list.map((worker) => (
+              <WorkerCard key={worker.worker_id} worker={worker} api={api} onRemoved={onRefresh} />
+            ))}
+          </div>
+        </>
       ) : null}
     </Section>
   );
@@ -65,30 +71,43 @@ function WorkerCard({
   onRemoved: () => void;
 }) {
   const offline = worker.state === "offline";
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<unknown>(null);
 
   async function forget() {
-    if (!window.confirm("移除设备「" + worker.name + "」？它已离线，只会清掉这条记录。")) return;
+    if (removing || !window.confirm(`移除离线设备「${worker.name}」的记录？`)) return;
+    setRemoveError(null);
+    setRemoving(true);
     try {
       await api.forgetWorker(worker.worker_id);
       onRemoved();
     } catch (error) {
-      window.alert("移除失败：" + (error instanceof Error ? error.message : String(error)));
+      setRemoveError(error);
+    } finally {
+      setRemoving(false);
     }
   }
   return (
     <article className={"worker-card" + (offline ? " worker-card--offline" : "")}>
       <div className="worker-head">
-        <span className={"dot dot--" + (offline ? "idle" : "ok")} aria-hidden="true" />
+        <span className={"dot dot--" + (offline ? "idle" : worker.state === "draining" ? "warn" : "ok")} aria-hidden="true" />
         <h3 className="worker-name" title={worker.worker_id}>
           {worker.name}
         </h3>
         <StateBadge state={worker.state} kind="worker" />
         {offline ? (
-          <button type="button" className="btn btn--sm btn--ghost" onClick={forget} title="删除这条离线记录">
-            移除
+          <button
+            type="button"
+            className="btn btn--sm btn--ghost"
+            onClick={() => void forget()}
+            disabled={removing}
+            aria-label={`移除离线设备 ${worker.name}`}
+          >
+            {removing ? "移除中…" : "移除"}
           </button>
         ) : null}
       </div>
+      {removeError ? <ErrorBox error={removeError} compact /> : null}
 
       <div className="worker-meta">
         <span>{worker.os ?? "未知系统"}</span>
@@ -148,7 +167,7 @@ function MeterRow({
   return (
     <div className="meter-row">
       <span className="meter-label">{label}</span>
-      <Bar value={value} tone={tone} />
+      <Bar value={value} tone={tone} label={label} />
       <span className="meter-value">{formatPct(value)}</span>
     </div>
   );

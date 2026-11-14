@@ -8,11 +8,11 @@ interface Props {
   settings: ConnectionSettings;
   health: PollState<HealthResponse>;
   onApply: (settings: ConnectionSettings) => void;
-  /** 需要鉴权接口的最近一次错误：/health 免鉴权，Token 错误只能从这里看出来。 */
-  probeError?: unknown;
+  probeError: CefApiError | null;
+  authenticated: boolean;
 }
 
-export function ConnectionBar({ settings, health, onApply, probeError }: Props) {
+export function ConnectionBar({ settings, health, onApply, probeError, authenticated }: Props) {
   const [draftUrl, setDraftUrl] = useState(settings.baseUrl);
   const [draftToken, setDraftToken] = useState(settings.token);
   const [showToken, setShowToken] = useState(false);
@@ -27,30 +27,28 @@ export function ConnectionBar({ settings, health, onApply, probeError }: Props) 
 
   let pillTone = "idle";
   let pillText = "未配置 Token";
-  let pillTitle = "在下方填写与后端 CEF_TOKEN 一致的 Token";
+  let pillTitle = "向队长获取访问 Token";
   if (settings.token) {
-    const unauthorized = probeError instanceof CefApiError && probeError.kind === "unauthorized";
-    const network = health.error instanceof CefApiError && health.error.kind === "network";
-    if (unauthorized) {
+    if (probeError?.kind === "unauthorized") {
       pillTone = "err";
       pillText = "认证失败";
-      pillTitle = "Token 无效：鉴权接口返回 401";
-    } else if (network) {
+      pillTitle = toUserMessage(probeError).title;
+    } else if (probeError?.kind === "network") {
       pillTone = "err";
       pillText = "连接失败";
-      pillTitle = toUserMessage(health.error).title;
-    } else if (health.error) {
+      pillTitle = toUserMessage(probeError).title;
+    } else if (probeError) {
       pillTone = "warn";
-      pillText = "接口异常";
-      pillTitle = toUserMessage(health.error).title;
-    } else if (health.data) {
+      pillText = probeError.kind === "not_found" ? "接口不存在" : "接口异常";
+      pillTitle = toUserMessage(probeError).title;
+    } else if (health.data?.ok && authenticated) {
       pillTone = "ok";
       pillText = "已连接";
-      pillTitle = "Coordinator 健康检查正常";
+      pillTitle = "算力池连接正常";
     } else {
       pillTone = "idle";
       pillText = "连接中…";
-      pillTitle = "正在请求 /api/v1/health";
+      pillTitle = "正在检查算力池连接";
     }
   }
 
@@ -83,10 +81,11 @@ export function ConnectionBar({ settings, health, onApply, probeError }: Props) 
               inputMode="url"
             />
           </label>
-          <label className="conn-field">
-            <span>访问 Token</span>
+          <div className="conn-field">
+            <label htmlFor="cef-access-token">访问 Token</label>
             <div className="token-wrap">
               <input
+                id="cef-access-token"
                 type={showToken ? "text" : "password"}
                 value={draftToken}
                 onChange={(event) => setDraftToken(event.target.value)}
@@ -99,21 +98,21 @@ export function ConnectionBar({ settings, health, onApply, probeError }: Props) 
                 className="token-toggle"
                 onClick={() => setShowToken((value) => !value)}
                 aria-label={showToken ? "隐藏 Token" : "显示 Token"}
+                aria-controls="cef-access-token"
               >
                 {showToken ? "隐藏" : "显示"}
               </button>
             </div>
-          </label>
+          </div>
           <div className="conn-actions">
             <button type="submit" className="btn btn--primary">
               应用{dirty ? " *" : ""}
             </button>
-            <span className={"health-pill health-pill--" + pillTone} title={pillTitle}>
+            <span className={"health-pill health-pill--" + pillTone} title={pillTitle} role="status">
               <span className={"dot dot--" + pillTone} aria-hidden="true" />
               {pillText}
             </span>
           </div>
-          <p className="conn-hint">Token 仅保存在本机 localStorage；所有请求自动携带 Authorization: Bearer 头。</p>
         </form>
       </div>
     </header>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ConnectionSettings } from "./api";
 import { CefApiError, createApiClient, loadSettings, saveSettings, toUserMessage } from "./api";
 import { usePolling } from "./hooks/usePolling";
@@ -12,11 +12,24 @@ import { EmptyBox } from "./components/ui";
 
 type Route = { name: "devices" } | { name: "submit" } | { name: "jobs" } | { name: "job"; jobId: string };
 
+const ROUTE_TITLES: Record<Route["name"], string> = {
+  devices: "设备面板",
+  submit: "提交任务",
+  jobs: "任务列表",
+  job: "任务详情",
+};
+
 function parseRoute(hash: string): Route {
   const path = hash.replace(/^#\/?/, "");
   const parts = path.split("/").filter(Boolean);
   if (parts[0] === "submit") return { name: "submit" };
-  if (parts[0] === "jobs" && parts[1]) return { name: "job", jobId: decodeURIComponent(parts[1]) };
+  if (parts[0] === "jobs" && parts[1]) {
+    try {
+      return { name: "job", jobId: decodeURIComponent(parts[1]) };
+    } catch {
+      return { name: "jobs" };
+    }
+  }
   if (parts[0] === "jobs") return { name: "jobs" };
   return { name: "devices" };
 }
@@ -24,9 +37,12 @@ function parseRoute(hash: string): Route {
 export default function App() {
   const [settings, setSettings] = useState<ConnectionSettings>(() => loadSettings());
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.hash));
+  const mainRef = useRef<HTMLElement>(null);
+  const focusOnNavigation = useRef(false);
 
   useEffect(() => {
     function onHashChange() {
+      focusOnNavigation.current = true;
       setRoute(parseRoute(window.location.hash));
     }
     window.addEventListener("hashchange", onHashChange);
@@ -34,13 +50,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const titles: Record<Route["name"], string> = {
-      devices: "设备面板",
-      submit: "提交任务",
-      jobs: "任务列表",
-      job: "任务详情",
-    };
-    document.title = titles[route.name] + " · Campus Edge Fabric";
+    document.title = ROUTE_TITLES[route.name] + " · Campus Edge Fabric";
+    if (focusOnNavigation.current) {
+      focusOnNavigation.current = false;
+      mainRef.current?.focus();
+    }
   }, [route]);
 
   const api = useMemo(
@@ -73,31 +87,27 @@ export default function App() {
     window.location.hash = hash;
   }
 
-  const probeError = health.error ?? workers.error ?? stats.error ?? jobs.error;
-  const bannerError =
-    probeError instanceof CefApiError &&
-    (probeError.kind === "unauthorized" || probeError.kind === "network" || probeError.kind === "server")
-      ? probeError
-      : null;
+  const errors = [health.error, workers.error, stats.error, jobs.error];
+  const connectionErrors = errors.filter((error): error is CefApiError => error instanceof CefApiError);
+  const bannerError = connectionErrors.find((error) => error.kind === "unauthorized")
+    ?? connectionErrors.find((error) =>
+      error.kind === "network" || (error.kind === "not_found" && error.code !== "not_found"),
+    )
+    ?? (health.error instanceof CefApiError ? health.error : null);
+
+  function repeatsBanner(error: unknown) {
+    return error instanceof CefApiError && error.kind === bannerError?.kind && error.code === bannerError?.code;
+  }
 
   function renderBanner() {
-    if (!api.hasToken) {
-      return (
-        <div className="banner banner--info">
-          <div className="banner-title">请先配置访问 Token</div>
-          <div className="banner-detail">
-            在顶部填写与后端 CEF_TOKEN 一致的 Token，点「应用」后本页会开始轮询 /api/v1 接口；Token 只保存在本机。
-          </div>
-        </div>
-      );
-    }
-    // /health 在后端是免鉴权的，所以 token 错误只能从需要鉴权的接口上看出来。
-    if (!bannerError) return null;
+    if (!ready || !bannerError) return null;
     const message = toUserMessage(bannerError);
     return (
       <div className={"banner " + (bannerError.kind === "unauthorized" ? "banner--err" : "banner--warn")}>
-        <div className="banner-title">{message.title}</div>
-        <div className="banner-detail">{message.detail}</div>
+        <div className="banner-message" role="alert">
+          <div className="banner-title">{message.title}</div>
+          <div className="banner-detail">{message.detail}</div>
+        </div>
         <button type="button" className="btn btn--sm btn--ghost" onClick={refreshAll}>
           重新检测
         </button>
@@ -110,23 +120,22 @@ export default function App() {
 
   return (
     <div className="app">
-      <ConnectionBar settings={settings} health={health} onApply={applySettings} probeError={probeError} />
-
-      <StatsStrip
-        stats={stats}
+      <ConnectionBar
+        settings={settings}
         health={health}
-        onRefresh={stats.refresh}
-        hideError={Boolean(bannerError)}
+        onApply={applySettings}
+        probeError={bannerError}
+        authenticated={workers.data !== null || stats.data !== null || jobs.data !== null}
       />
 
       <nav className="tabs" aria-label="主导航">
-        <a className={"tab" + (activeTab === "devices" ? " tab--active" : "")} href="#/devices">
+        <a className={"tab" + (activeTab === "devices" ? " tab--active" : "")} href="#/devices" aria-current={activeTab === "devices" ? "page" : undefined}>
           设备面板
         </a>
-        <a className={"tab" + (activeTab === "submit" ? " tab--active" : "")} href="#/submit">
+        <a className={"tab" + (activeTab === "submit" ? " tab--active" : "")} href="#/submit" aria-current={activeTab === "submit" ? "page" : undefined}>
           提交任务
         </a>
-        <a className={"tab" + (activeTab === "jobs" ? " tab--active" : "")} href="#/jobs">
+        <a className={"tab" + (activeTab === "jobs" ? " tab--active" : "")} href="#/jobs" aria-current={activeTab === "jobs" ? "page" : undefined}>
           任务列表
           {typeof runningJobs === "number" && runningJobs > 0 ? (
             <span className="tab-count">{runningJobs}</span>
@@ -134,21 +143,24 @@ export default function App() {
         </a>
       </nav>
 
-      <main className="app-main">
+      <main className="app-main" ref={mainRef} tabIndex={-1} aria-label={ROUTE_TITLES[route.name]}>
         {renderBanner()}
 
         {!ready ? (
           <EmptyBox
-            title="尚未连接到 Coordinator"
-            hint="填写 Token 并应用后，即可查看设备、提交任务与查看任务详情。若后端尚未启动，页面会显示明确的连接失败提示，而不是白屏。"
+            title="连接到算力池"
+            hint="向队长获取访问 Token，填入上方连接栏后点击「应用」。"
+            action={
+              <button type="button" className="btn btn--sm btn--primary" onClick={() => document.getElementById("cef-access-token")?.focus()}>
+                填写访问 Token
+              </button>
+            }
           />
         ) : route.name === "devices" ? (
-          <WorkerPanel
-            workers={workers}
-            api={api}
-            onRefresh={workers.refresh}
-            hideError={Boolean(bannerError)}
-          />
+          <>
+            <StatsStrip stats={stats} health={health} onRefresh={stats.refresh} hideError={repeatsBanner(stats.error)} />
+            <WorkerPanel workers={workers} api={api} onRefresh={workers.refresh} hideError={repeatsBanner(workers.error)} />
+          </>
         ) : route.name === "submit" ? (
           <JobSubmitForm
             api={api}
@@ -158,9 +170,8 @@ export default function App() {
         ) : route.name === "jobs" ? (
           <JobList
             jobs={jobs}
-            onOpen={(jobId) => navigate("#/jobs/" + encodeURIComponent(jobId))}
             onRefresh={jobs.refresh}
-            hideError={Boolean(bannerError)}
+            hideError={repeatsBanner(jobs.error)}
           />
         ) : (
           <JobDetail
@@ -168,15 +179,12 @@ export default function App() {
             api={api}
             jobId={route.jobId}
             onBack={() => navigate("#/jobs")}
-            hideError={Boolean(bannerError)}
+            connectionError={bannerError}
           />
         )}
 
         <footer className="app-footer">
           <span>Campus Edge Fabric · 边缘算力调度仪表盘</span>
-          <span>接口契约 docs/api.md（v1 冻结）</span>
-          <span>轮询：设备 3s · 统计 5s · 任务 5s · 详情 2s</span>
-          <span className="mono">{api.baseUrl || "未配置地址"}/api/v1</span>
         </footer>
       </main>
     </div>

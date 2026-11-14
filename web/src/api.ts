@@ -81,6 +81,7 @@ export interface JobTask {
   worker_name?: string | null;
   attempt?: number;
   duration_s: number | null;
+  error?: string;
 }
 
 /** GET /api/v1/jobs/{job_id} 的完整响应。 */
@@ -145,6 +146,38 @@ export interface SubmitResponse {
   state?: JobState;
 }
 
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface AgentChatRequest {
+  messages: ChatMessage[];
+  context: { files: { name: string; size: number }[] };
+}
+
+export interface AgentPreview {
+  workload: string;
+  params: Record<string, unknown>;
+  task_count: number | null;
+  note: string;
+}
+
+export interface AgentToolTrace {
+  name: string;
+  args: Record<string, unknown>;
+  ok: boolean;
+  summary: string;
+}
+
+export interface AgentChatResponse {
+  reply: string;
+  preview: AgentPreview | null;
+  tool_trace: AgentToolTrace[];
+  model?: string;
+  usage: Record<string, unknown> | null;
+}
+
 export interface DownloadPayload {
   blob: Blob;
   filename: string;
@@ -195,21 +228,39 @@ export interface UserMessage {
 /** 把任意异常翻译成明确的中文提示，避免出现 "Failed to fetch" 之类的英文白屏。 */
 export function toUserMessage(error: unknown): UserMessage {
   if (error instanceof CefApiError) {
+    if (error.status === 503 && error.code === "agent_unavailable") {
+      return {
+        title: "AI 助手暂不可用，请在下方手动选择参数",
+        detail: "当前 Coordinator 尚未配置 AI 助手。",
+      };
+    }
+    if (error.status === 502 && error.code === "agent_error") {
+      return {
+        title: "AI 助手连接模型服务失败",
+        detail: "请稍后重新发送，或在下方手动选择参数。",
+      };
+    }
     switch (error.kind) {
       case "network":
         return {
           title: "无法连接 Coordinator",
-          detail: error.message + " 请确认后端已启动（默认 127.0.0.1:8080）、地址与端口正确，并且当前网络可达。",
+          detail: "请检查网络和顶部的服务地址，确认 Coordinator 已启动后重试。",
         };
       case "unauthorized":
         return {
           title: "认证失败：Token 无效或缺失",
-          detail: "请在顶部连接条填写与后端 CEF_TOKEN 一致的 Token，然后点「应用」。",
+          detail: "请在顶部填写有效的 Token，然后点击「应用」。",
         };
       case "not_found":
+        if (error.code === "not_found") {
+          return {
+            title: "找不到这条记录（404）",
+            detail: "请返回列表刷新，或确认记录是否已移除。",
+          };
+        }
         return {
           title: "接口不存在（404）",
-          detail: "当前 Coordinator 可能尚未实现该接口。界面已按空状态渲染，不影响其它面板。",
+          detail: "请检查顶部的服务地址，或联系管理员确认 Coordinator 版本。",
         };
       case "conflict":
         return { title: "状态冲突（409）", detail: error.message };
@@ -348,6 +399,7 @@ function normalizeTask(raw: unknown, index: number): JobTask | null {
     worker_name: asString(r.worker_name) ?? null,
     attempt: asNumber(r.attempt),
     duration_s: asNumberOrNull(r.duration_s),
+    error: asString(r.error),
   };
 }
 
@@ -435,6 +487,48 @@ function normalizeWorkload(raw: unknown): Workload | null {
   };
 }
 
+function normalizeAgentChat(raw: unknown): AgentChatResponse {
+  const response = asRecord(raw);
+  const reply = asString(response?.reply);
+  if (!response || !reply) throw new CefApiError("parse", "AI 助手响应缺少回复内容。");
+
+  let preview: AgentPreview | null = null;
+  if (response.preview != null) {
+    const data = asRecord(response.preview);
+    const workload = asString(data?.workload);
+    const params = asRecord(data?.params);
+    if (!data || !workload || !params) {
+      throw new CefApiError("parse", "AI 助手返回的任务预览缺少工作负载或参数。");
+    }
+    const count = asNumberOrNull(data.task_count);
+    preview = {
+      workload,
+      params,
+      task_count: count !== null && Number.isInteger(count) && count >= 0 ? count : null,
+      note: asString(data.note) ?? "",
+    };
+  }
+
+  const trace = Array.isArray(response.tool_trace) ? response.tool_trace : [];
+  return {
+    reply,
+    preview,
+    tool_trace: trace.map((entry): AgentToolTrace | null => {
+      const data = asRecord(entry);
+      const name = asString(data?.name);
+      if (!data || !name) return null;
+      return {
+        name,
+        args: asRecord(data.args) ?? {},
+        ok: data.ok === true,
+        summary: asString(data.summary) ?? "",
+      };
+    }).filter(isNotNull),
+    model: asString(response.model),
+    usage: asRecord(response.usage),
+  };
+}
+
 function extractApiError(raw: unknown): { code?: string; message?: string } {
   const rec = asRecord(raw);
   const err = rec ? asRecord(rec.error) : null;
@@ -477,6 +571,7 @@ export interface ApiClient {
   getWorkloads(signal?: AbortSignal): Promise<Workload[]>;
   listJobs(options?: ListJobsOptions, signal?: AbortSignal): Promise<JobSummary[]>;
   getJob(jobId: string, signal?: AbortSignal): Promise<JobDetail>;
+  chat(request: AgentChatRequest, signal?: AbortSignal): Promise<AgentChatResponse>;
   submitJob(spec: JobSpec, files: File[]): Promise<SubmitResponse>;
   cancelJob(jobId: string): Promise<void>;
   forgetWorker(workerId: string): Promise<void>;
@@ -598,6 +693,15 @@ export function createApiClient(baseUrlRaw: string, tokenRaw: string): ApiClient
     async getJob(jobId: string, signal?: AbortSignal): Promise<JobDetail> {
       const raw = await requestJson("/jobs/" + encodeURIComponent(jobId), { method: "GET" }, signal);
       return normalizeJobDetail(raw);
+    },
+
+    async chat(request: AgentChatRequest, signal?: AbortSignal): Promise<AgentChatResponse> {
+      const raw = await requestJson("/agent/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      }, signal);
+      return normalizeAgentChat(raw);
     },
 
     async submitJob(spec: JobSpec, files: File[]): Promise<SubmitResponse> {

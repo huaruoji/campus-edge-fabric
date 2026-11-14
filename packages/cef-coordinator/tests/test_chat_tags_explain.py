@@ -136,3 +136,18 @@ def test_job_detail_explains_what_it_did(wire):
     assert blob.headers["content-type"].startswith("image/webp")
     input_blob = http.get(task["inputs"][0]["url"])
     assert input_blob.headers["content-type"].startswith("image/jpeg")
+
+
+def test_restart_does_not_wipe_operator_tags(wire):
+    """A worker restart re-registers with no --tags; that must not revert a PATCH."""
+    api, http, _ = wire
+    worker = api.register({"name": "pc", "tags": [], "workloads": [{"kind": "thumbnail", "available": True}]})["worker_id"]
+    http.patch(f"/api/v1/workers/{worker}", json={"tags": ["bench-pc", "engine:cpu"]})
+    api.register({"worker_id": worker, "name": "pc", "tags": [], "workloads": [{"kind": "thumbnail", "available": True}]})
+    tags = {w["worker_id"]: w["tags"] for w in http.get("/api/v1/workers").json()["workers"]}
+    assert tags[worker] == ["bench-pc", "engine:cpu"]
+
+    # an explicit --tags on the command line is still an intent we honour
+    api.register({"worker_id": worker, "name": "pc", "tags": ["ENGINE:CUDA"], "workloads": [{"kind": "thumbnail", "available": True}]})
+    tags = {w["worker_id"]: w["tags"] for w in http.get("/api/v1/workers").json()["workers"]}
+    assert tags[worker] == ["engine:cuda"]

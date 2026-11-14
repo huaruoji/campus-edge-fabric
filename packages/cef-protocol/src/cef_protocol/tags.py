@@ -16,7 +16,7 @@ _ALLOWED = re.compile(r"[^a-z0-9.:-]+")
 _DASHES = re.compile(r"-{2,}")
 
 #: prefixes with a meaning; everything else is a free-form label
-RESERVED_PREFIXES = ("role:", "hw:", "site:")
+RESERVED_PREFIXES = ("role:", "hw:", "engine:", "site:")
 BENCH_PREFIX = "bench-"
 
 MAX_TAGS = 8
@@ -70,6 +70,7 @@ def categorize(tag: str) -> str:
 CATEGORY_LABELS = {
     "role": "角色",
     "hw": "硬件",
+    "engine": "运行时",
     "site": "场地",
     "bench": "基准",
     "free": "其他",

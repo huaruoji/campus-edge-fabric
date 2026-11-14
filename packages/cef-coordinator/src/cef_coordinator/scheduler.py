@@ -74,6 +74,10 @@ def upsert_worker(db_path, reg: dict[str, Any], settings: Settings) -> sqlite3.R
             _event(conn, "worker_registered", worker_id=worker_id, message=reg.get("name", ""))
         else:
             worker_id = existing["id"]
+            # A restart must not wipe tags an operator set through PATCH: only a
+            # non-empty --tags on the command line is treated as an explicit intent.
+            incoming = reg.get("tags") or []
+            tags_json = _json(incoming) if incoming else (existing["tags"] or "[]")
             conn.execute(
                 """UPDATE workers SET name=?,hostname=?,os=?,cpu_count=?,tags=?,workloads=?,
                        slots=?,max_batch=?,state='online',last_seen=?,meta=? WHERE id=?""",
@@ -82,7 +86,7 @@ def upsert_worker(db_path, reg: dict[str, Any], settings: Settings) -> sqlite3.R
                     reg.get("hostname", existing["hostname"]),
                     reg.get("os", existing["os"]),
                     int(reg.get("cpu_count") or existing["cpu_count"] or 1),
-                    _json(reg.get("tags") or []),
+                    tags_json,
                     _json(reg.get("workloads") or []),
                     max(1, int(reg.get("slots") or existing["slots"])),
                     max(1, int(reg.get("max_batch") or existing["max_batch"])),

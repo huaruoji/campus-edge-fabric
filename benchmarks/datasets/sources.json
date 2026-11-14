@@ -1,0 +1,63 @@
+{
+  "created_at": "2026-11-14T07:11:53.001520+00:00",
+  "datasets": [
+    {
+      "key": "thumbnail",
+      "name": "BSDS300 images",
+      "url": "https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/bsds/BSDS300-images.tgz",
+      "source": "https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/bsds/",
+      "bytes": 22211847,
+      "sha256": "7f855a00491a3f1ca2609b3c96651b88b265fe59b70a7b007cc7a2850a22b386",
+      "files": 302,
+      "jpg": 300,
+      "license_note": "Non-commercial research and educational purposes only; see provider terms.",
+      "archive": "BSDS300-images.tgz"
+    },
+    {
+      "key": "infer",
+      "name": "COCO128",
+      "url": "https://github.com/ultralytics/assets/releases/download/v0.0.0/coco128.zip",
+      "archive": "coco128.zip",
+      "source": "https://docs.ultralytics.com/datasets/detect/coco128/",
+      "use": "Detection integration and throughput checks, not held-out model generalization evaluation.",
+      "license_note": "Preserve bundled license; original images are subject to individual COCO/Flickr terms. See https://cocodataset.org/#termsofuse",
+      "bytes": 6983030,
+      "sha256": "61e5e3028863d8ffc3b81d6a514603954889f0edd5e4b44c4ce60b2da99aeb8e",
+      "files": 258,
+      "jpg": 128,
+      "labels": 128,
+      "blends": []
+    },
+    {
+      "key": "blender",
+      "name": "Classroom",
+      "url": "https://download.blender.org/demo/test/classroom.zip",
+      "source": "https://www.blender.org/download/demo-files/",
+      "bytes": 70279690,
+      "sha256": "0f0ecc58d45f12b2f4272a53e2d8e69135518e16e956b118f10c20d8dcfdf5e6",
+      "files": 53,
+      "blends": [
+        "blender/extracted/classroom/classroom.blend",
+        "blender/extracted/classroom/assets/books/books.blend",
+        "blender/extracted/classroom/assets/chairs/chairs.blend",
+        "blender/extracted/classroom/assets/coatStand/coatStand.blend",
+        "blender/extracted/classroom/assets/desks/desks.blend",
+        "blender/extracted/classroom/assets/dustBin/dustBin.blend",
+        "blender/extracted/classroom/assets/lamps/lamps.blend",
+        "blender/extracted/classroom/assets/officeSupplies/officeSupplies.blend",
+        "blender/extracted/classroom/assets/radiator/radiator.blend",
+        "blender/extracted/classroom/assets/suitcase/suitcase.blend",
+        "blender/extracted/classroom/assets/wallClock/wallClock.blend",
+        "blender/extracted/classroom/assets/wastes/wastes.blend"
+      ],
+      "license_note": "Blender demo page credits Christophe Seux and marks Classroom CC0.",
+      "validation": "ZIP CRC verified. Scene not opened in Blender; no rendering performed.",
+      "archive": "classroom.zip"
+    }
+  ],
+  "notes": [
+    "Dataset downloads only: no worker started, no model weights downloaded, no render or inference performed.",
+    "SHA256 values are locally computed fingerprints, not comparisons against publisher-supplied checksums.",
+    "Archive fingerprints and file checks were observed on 2026-11-14; they are not a completed multi-device benchmark."
+  ]
+}

@@ -159,7 +159,7 @@ class InferWorkload(Workload):
             path = self.model_dir / f"{model}.onnx"
         if not path.exists():
             raise WorkloadError(f"model not found: {model} (looked in {self.model_dir})", retryable=False)
-        key = (str(path), device + ort.get_available_providers().__str__())
+        key = (str(path), device + ort.get_available_providers().__str__() + ":tf32=0")
         if key not in _SESSION_CACHE:
             _preload_cuda()
             providers = [p for p in ("CUDAExecutionProvider", "CPUExecutionProvider") if p in ort.get_available_providers()]
@@ -168,7 +168,11 @@ class InferWorkload(Workload):
                 if wanted not in providers:
                     raise WorkloadError(f"requested provider unavailable: {wanted}", retryable=False)
                 providers = [wanted]
-            _SESSION_CACHE[key] = ort.InferenceSession(str(path), providers=providers or None)
+            # Match the CUDA-required deployment profile and the CPU numerical
+            # reference. ORT otherwise enables TF32 on supported NVIDIA cards,
+            # which can move confidences outside the fixed comparison tolerance.
+            configured = [(p, {"use_tf32": 0}) if p == "CUDAExecutionProvider" else p for p in providers]
+            _SESSION_CACHE[key] = ort.InferenceSession(str(path), providers=configured or None)
         session = _SESSION_CACHE[key]
         if device != "auto":
             wanted = "CPUExecutionProvider" if device == "cpu" else "CUDAExecutionProvider"
@@ -235,6 +239,7 @@ class InferWorkload(Workload):
             "size": [w, h],
             "detections": dets,
             "provider": sess.get_providers()[0],
+            "provider_options": sess.get_provider_options(),
         }
         out.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
         return TaskResult(

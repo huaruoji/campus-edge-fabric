@@ -91,6 +91,9 @@ def main(argv: list[str] | None = None) -> int:
         level=getattr(logging, str(getattr(args, "log_level", "info")).upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(message)s",
     )
+    # one poll per second: httpx's per-request INFO lines would drown the log
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
     if args.cmd in (None, "run", "join"):
         if not cfg.server:

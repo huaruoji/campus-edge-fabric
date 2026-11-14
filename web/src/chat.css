@@ -63,7 +63,7 @@
 
 .preset-card {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
   height: auto;
   padding: 12px;
@@ -71,20 +71,34 @@
   border-radius: var(--radius-card);
   background: var(--surface);
   color: var(--text);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
   transition: border-color 0.12s ease;
 }
 
-.preset-card:hover:not(:disabled) {
+.preset-card:hover {
   border-color: var(--border-strong);
 }
 
-.preset-card:disabled {
+/* 整张卡不再是 <button>（卡内有「复制命令」），主点击区是 .preset-main。 */
+.preset-main {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.preset-main:disabled {
   cursor: not-allowed;
-  background: var(--surface-subtle);
   color: var(--text-muted);
+}
+
+.preset-card--disabled {
+  background: var(--surface-subtle);
 }
 
 .preset-title {
@@ -93,8 +107,14 @@
   color: var(--text);
 }
 
-.preset-card:disabled .preset-title {
+.preset-main:disabled .preset-title {
   color: var(--text-muted);
+}
+
+.preset-note {
+  margin-inline-start: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .preset-meta {
@@ -133,9 +153,50 @@
   overflow-wrap: anywhere;
 }
 
-.preset-files-hint {
-  font-size: 12px;
+.preset-dataset {
+  display: grid;
+  gap: 4px;
+  padding-block-start: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.preset-dataset-label {
   color: var(--text-muted);
+  font-size: 12px;
+}
+
+.preset-dataset-state {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.preset-dataset-state--ok {
+  color: var(--ok);
+}
+
+.preset-dataset-state--missing {
+  color: var(--warn);
+}
+
+.preset-command {
+  display: block;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.preset-dataset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 
 .job-chat-sources {

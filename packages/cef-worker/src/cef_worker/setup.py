@@ -49,6 +49,15 @@ def _python_has(module: str) -> bool:
     return importlib.util.find_spec(module) is not None
 
 
+def _providers() -> list[str]:
+    try:
+        import onnxruntime as ort
+
+        return list(ort.get_available_providers())
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def _pip_install(package: str) -> Step:
     argv = [sys.executable, "-m", "pip", "install", "--quiet", package]
     try:
@@ -62,15 +71,16 @@ def _pip_install(package: str) -> Step:
 
 def _infer(model_dir: Path, dry_run: bool) -> RecipeResult:
     result = RecipeResult("infer", dry_run, True)
+    has_gpu = bool(shutil.which("nvidia-smi") or Path("/usr/lib/wsl/lib/nvidia-smi").exists())
+    package = "onnxruntime-gpu" if has_gpu else "onnxruntime"
     if _python_has("onnxruntime"):
-        result.steps.append(Step("onnxruntime", True, "already installed"))
+        engine = "cuda" if "CUDAExecutionProvider" in _providers() else "cpu"
+        result.steps.append(Step("onnxruntime", True, f"already installed (engine={engine})"))
     elif dry_run:
-        result.steps.append(
-            Step("onnxruntime", False, "missing", f"{sys.executable} -m pip install onnxruntime")
-        )
+        result.steps.append(Step("onnxruntime", False, "missing", f"{sys.executable} -m pip install {package}"))
         result.ok = False
     else:
-        result.steps.append(_pip_install("onnxruntime"))
+        result.steps.append(_pip_install(package))
         result.ok = all(step.ok for step in result.steps)
 
     models = sorted(p.name for p in model_dir.glob("*.onnx")) if model_dir.is_dir() else []

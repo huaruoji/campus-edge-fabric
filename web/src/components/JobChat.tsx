@@ -125,6 +125,8 @@ export function JobChat({ api }: { api: ApiClient; token: string }) {
   const [sendError, setSendError] = useState<unknown>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([]);
+  const [dataSource, setDataSource] = useState<DataSource>("files");
+  const [datasetRef, setDatasetRef] = useState("");
   const [tagFilter, setTagFilter] = useState("");
   const [nowTick, setNowTick] = useState(() => Date.now());
 
@@ -139,9 +141,24 @@ export function JobChat({ api }: { api: ApiClient; token: string }) {
   const composerId = useId();
   const nicknameId = useId();
   const tagSelectId = useId();
+  const dataSourceName = useId();
+  const datasetSelectId = useId();
 
   const workloads = usePolling((signal) => api.getWorkloads(signal), 15000, api.hasToken, [api]);
   const tags = usePolling((signal) => api.getTags(signal), 15000, api.hasToken, [api]);
+  const datasets = usePolling((signal) => api.listDatasets(signal), DATASET_POLL_MS, api.hasToken, [api]);
+
+  const datasetList: DatasetSummary[] = datasets.data ?? [];
+  const datasetByName = useMemo(() => {
+    const map = new Map<string, DatasetSummary>();
+    for (const item of datasetList) map.set(item.name, item);
+    return map;
+  }, [datasetList]);
+  /** 后端还没上线 GET /datasets 时（404），数据来源里隐藏「数据集」，只保留上传。 */
+  const datasetEndpointMissing = datasets.error instanceof CefApiError && datasets.error.kind === "not_found";
+  const selectedDataset = dataSource === "dataset" ? datasetByName.get(datasetRef) ?? null : null;
+  /** 实际随对话上下文发送的数据集名；上传文件模式下为 null。 */
+  const datasetContext = selectedDataset ? selectedDataset.name : null;
 
   const workloadMap = useMemo(() => {
     const map = new Map<string, Workload>();
@@ -230,7 +247,13 @@ export function JobChat({ api }: { api: ApiClient; token: string }) {
     try {
       const response = await api.chat({
         messages: history,
-        context: { files: files.slice(0, MAX_CONTEXT_FILES).map(({ name, size }) => ({ name, size })) },
+        context: {
+          // 数据集与上传文件互斥：选了数据集就不带 files。
+          files: datasetContext
+            ? []
+            : files.slice(0, MAX_CONTEXT_FILES).map(({ name, size }) => ({ name, size })),
+          dataset: datasetContext,
+        },
         author,
         room: "pool",
       }, controller.signal);
@@ -291,12 +314,26 @@ export function JobChat({ api }: { api: ApiClient; token: string }) {
   function applyPreset(preset: Preset): void {
     setDraft(preset.prompt);
     setSendError(null);
-    const missing = preset.fileCount - files.length;
-    setNotice(missing > 0
-      ? `已把「${preset.title}」的文案填进输入框，还没有发送。该预设需要 ${preset.fileCount} 个真实文件（来自 ${preset.dataset}），当前已载入 ${files.length} 个，先补 ${missing} 个。`
-      : `已把「${preset.title}」的文案填进输入框，还没有发送。确认文案后点「发送」。`);
+    // 只填文案 + 预选数据来源：这里不发起任何请求，也不发送消息。
+    const registered = datasetByName.get(preset.datasetRef) ?? null;
+    if (datasetEndpointMissing) {
+      setDataSource("files");
+      setNotice(
+        `已把「${preset.title}」的文案填进输入框，还没有发送。后端未提供数据集接口，请手动上传 ${preset.fileCount} 个文件。`
+      );
+    } else if (registered) {
+      setDataSource("dataset");
+      setDatasetRef(registered.name);
+      setNotice(
+        `已把「${preset.title}」的文案填进输入框，数据来源设为数据集 ${registered.name}（${registered.count} 个文件 / ${formatBytes(registered.bytes)}），还没有发送。`
+      );
+    } else {
+      setDataSource("files");
+      setNotice(
+        `已把「${preset.title}」的文案填进输入框，还没有发送。数据集 ${preset.datasetRef} 尚未登记：先在本机运行 ${preset.datasetCommand}，或手动上传 ${preset.fileCount} 个文件。`
+      );
+    }
     textareaRef.current?.focus();
-    // 只填文案：这里不发起任何请求。
   }
 
   function availabilityOf(preset: Preset): PresetAvailability {
@@ -402,76 +439,170 @@ export function JobChat({ api }: { api: ApiClient; token: string }) {
         <ul className="preset-grid">
           {PRESETS.map((preset) => {
             const availability = availabilityOf(preset);
+            const registered = datasetByName.get(preset.datasetRef) ?? null;
+            const taskCount = registered ? registered.count : preset.taskCount;
             return (
               <li key={preset.id}>
-                <button
-                  type="button"
-                  className={"preset-card" + (availability.available ? "" : " preset-card--disabled")}
-                  onClick={() => applyPreset(preset)}
-                  disabled={!availability.available}
-                  aria-describedby={availability.reason ? "preset-reason-" + preset.id : undefined}
-                >
-                  <span className="preset-title">{preset.title}</span>
-                  <dl className="preset-meta">
-                    <div>
-                      <dt>数据集</dt>
-                      <dd>{preset.dataset}</dd>
-                    </div>
-                    <div>
-                      <dt>任务</dt>
-                      <dd>{workloadLabel(preset.workload)}</dd>
-                    </div>
-                    <div>
-                      <dt>预计任务数</dt>
-                      <dd>{preset.taskCount} 个</dd>
-                    </div>
-                    <div>
-                      <dt>可运行设备</dt>
-                      <dd>
-                        {availability.devices.length > 0
-                          ? availability.devices.join("、")
-                          : availability.available
-                            ? "读取中…"
-                            : "暂无"}
-                      </dd>
-                    </div>
-                  </dl>
-                  <span className="preset-params">{preset.paramsText}</span>
-                  {availability.reason ? (
-                    <span className="preset-reason" id={"preset-reason-" + preset.id}>{availability.reason}</span>
-                  ) : null}
-                  {preset.fileCount > 0 ? (
-                    <span className="preset-files-hint">
-                      需要 {preset.fileCount} 个真实文件（当前 {files.length} 个）
-                    </span>
-                  ) : null}
-                </button>
+                <div className={"preset-card" + (availability.available ? "" : " preset-card--disabled")}>
+                  <button
+                    type="button"
+                    className="preset-main"
+                    onClick={() => applyPreset(preset)}
+                    disabled={!availability.available}
+                    aria-describedby={availability.reason ? "preset-reason-" + preset.id : undefined}
+                  >
+                    <span className="preset-title">{preset.title}</span>
+                    <dl className="preset-meta">
+                      <div>
+                        <dt>数据集</dt>
+                        <dd>{preset.dataset}</dd>
+                      </div>
+                      <div>
+                        <dt>任务</dt>
+                        <dd>{workloadLabel(preset.workload)}</dd>
+                      </div>
+                      <div>
+                        <dt>预计任务数</dt>
+                        <dd>
+                          {taskCount} 个
+                          <span className="preset-note">{registered ? "（按登记文件数）" : "（估算）"}</span>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>可运行设备</dt>
+                        <dd>
+                          {availability.devices.length > 0
+                            ? availability.devices.join("、")
+                            : availability.available
+                              ? "读取中…"
+                              : "暂无"}
+                        </dd>
+                      </div>
+                    </dl>
+                    <span className="preset-params">{preset.paramsText}</span>
+                    {availability.reason ? (
+                      <span className="preset-reason" id={"preset-reason-" + preset.id}>{availability.reason}</span>
+                    ) : null}
+                  </button>
+                  <div className="preset-dataset">
+                    <span className="preset-dataset-label">数据来源</span>
+                    {datasetEndpointMissing ? (
+                      <span className="preset-dataset-state preset-dataset-state--missing">
+                        后端未提供数据集接口，需手动上传 {preset.fileCount} 个文件
+                      </span>
+                    ) : registered ? (
+                      <span className="preset-dataset-state preset-dataset-state--ok">
+                        已登记 · {registered.count} 个文件 / {formatBytes(registered.bytes)}
+                      </span>
+                    ) : (
+                      <>
+                        <span className="preset-dataset-state preset-dataset-state--missing">
+                          数据集 {preset.datasetRef} 未登记
+                        </span>
+                        <code className="preset-command">{preset.datasetCommand}</code>
+                        <div className="preset-dataset-actions">
+                          <button
+                            type="button"
+                            className="btn btn--sm btn--ghost"
+                            onClick={() => {
+                              void copyText(preset.datasetCommand).then((ok) => {
+                                setNotice(ok ? "已复制登记命令到剪贴板。" : "复制失败，请手动选中命令文本。");
+                              });
+                            }}
+                          >
+                            复制命令
+                          </button>
+                          <span className="field-hint">卡片仍可点，但只能手动上传 {preset.fileCount} 个文件。</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
               </li>
             );
           })}
         </ul>
 
         <div className="job-chat-sources">
-          <div className="job-chat-files">
-            <span className="field-hint">待处理文件：{files.length} 个</span>
-            <button
-              type="button"
-              className="btn btn--sm btn--ghost"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              上传文件
-            </button>
-            <input ref={fileInputRef} type="file" multiple hidden onChange={handleFileInput} />
-            {files.length > 0 ? (
+          <fieldset className="data-source">
+            <legend className="field-label">数据来源</legend>
+            <div className="data-source-options">
+              <label className="data-source-option">
+                <input
+                  type="radio"
+                  name={dataSourceName}
+                  value="dataset"
+                  checked={dataSource === "dataset"}
+                  disabled={datasetEndpointMissing}
+                  onChange={() => setDataSource("dataset")}
+                />
+                已登记数据集
+              </label>
+              <label className="data-source-option">
+                <input
+                  type="radio"
+                  name={dataSourceName}
+                  value="files"
+                  checked={dataSource === "files"}
+                  onChange={() => setDataSource("files")}
+                />
+                上传文件
+              </label>
+            </div>
+          </fieldset>
+
+          {dataSource === "dataset" && !datasetEndpointMissing ? (
+            <div className="job-chat-dataset">
+              <label htmlFor={datasetSelectId} className="field-label">选择数据集</label>
+              <select
+                id={datasetSelectId}
+                className="select select--sm"
+                value={datasetRef}
+                onChange={(event) => setDatasetRef(event.target.value)}
+              >
+                <option value="">选择数据集…</option>
+                {datasetList.map((item) => (
+                  <option key={item.id} value={item.name}>{item.name}</option>
+                ))}
+              </select>
+              <span className="field-hint" aria-live="polite">
+                {selectedDataset
+                  ? `${selectedDataset.count} 个文件 / ${formatBytes(selectedDataset.bytes)}；提交时不传文件`
+                  : datasets.loading
+                    ? "正在读取数据集…"
+                    : datasetList.length === 0
+                      ? "还没有已登记的数据集：先运行 cef dataset add …"
+                      : "选一个已登记的数据集，不需要上传任何文件"}
+              </span>
+              {selectedDataset?.description ? (
+                <span className="field-hint">{selectedDataset.description}</span>
+              ) : null}
+            </div>
+          ) : (
+            <div className="job-chat-files">
+              <span className="field-hint">待处理文件：{files.length} 个</span>
               <button
                 type="button"
                 className="btn btn--sm btn--ghost"
-                onClick={() => { setFiles([]); setNotice("已清空样本文件，不会影响已经发出的对话。"); }}
+                onClick={() => fileInputRef.current?.click()}
               >
-                清空文件
+                上传文件
               </button>
-            ) : null}
-          </div>
+              <input ref={fileInputRef} type="file" multiple hidden onChange={handleFileInput} />
+              {files.length > 0 ? (
+                <button
+                  type="button"
+                  className="btn btn--sm btn--ghost"
+                  onClick={() => { setFiles([]); setNotice("已清空样本文件，不会影响已经发出的对话。"); }}
+                >
+                  清空文件
+                </button>
+              ) : null}
+            </div>
+          )}
+          {dataSource === "dataset" && datasetEndpointMissing ? (
+            <p className="field-hint">后端没有数据集接口（404），暂时只能上传文件。</p>
+          ) : null}
           {tagStats.length > 0 ? (
             <div className="job-chat-tag">
               <label htmlFor={tagSelectId} className="field-label">设备标签</label>
@@ -551,7 +682,17 @@ export function JobChat({ api }: { api: ApiClient; token: string }) {
                     {entry.job_id ? (
                       <a href={"#/jobs/" + encodeURIComponent(entry.job_id)}>查看任务详情</a>
                     ) : null}
-                    {entry.preview ? <PreviewBlock preview={entry.preview} /> : null}
+                    {entry.preview ? (
+                      <PreviewBlock
+                        preview={entry.preview}
+                        api={api}
+                        files={files}
+                        dataset={datasetContext}
+                        onSubmitted={(jobId) => {
+                          setNotice("已提交任务 " + jobId + "，可以在任务详情里查看进度。");
+                        }}
+                      />
+                    ) : null}
                     {entry.trace && entry.trace.length > 0 ? (
                       <details className="job-chat-trace">
                         <summary>工具调用记录（{entry.trace.length}）</summary>
@@ -610,8 +751,10 @@ export function JobChat({ api }: { api: ApiClient; token: string }) {
             placeholder="比如：目前有哪些设备在线？"
           />
           <div className="job-chat-composer-actions">
-            <span className="field-hint">
-              已载入 {files.length} 个样本文件；需要文件时先上传，再点预设或直接描述任务
+            <span className="field-hint" aria-live="polite">
+              {datasetContext
+                ? `数据来源：数据集 ${datasetContext}；不需要上传文件`
+                : `数据来源：已载入 ${files.length} 个文件；也可以切换成已登记数据集`}
             </span>
             <div className="job-chat-buttons">
               <button type="button" className="btn btn--ghost" disabled={sending} onClick={retryLoad}>
@@ -628,7 +771,58 @@ export function JobChat({ api }: { api: ApiClient; token: string }) {
   );
 }
 
-function PreviewBlock({ preview }: { preview: AgentPreview }) {
+/**
+ * 助手给出的任务预览 + **确认提交**。
+ *
+ * 提交规则（与后端 JobSpec 对齐）：
+ * - 有数据集（预览自带的优先，其次当前选择）→ spec.dataset，且**不传任何文件**；
+ * - 没有数据集但已载入文件 → spec.inputs 列出文件名，文件随 multipart 一起传；
+ * - 两者都没有 → 按钮禁用，提示先上传文件或选数据集。
+ * 提交成功后按钮变「已提交」并给出任务详情链接，避免重复提交。
+ */
+function PreviewBlock({
+  preview,
+  api,
+  files,
+  dataset,
+  onSubmitted,
+}: {
+  preview: AgentPreview;
+  api: ApiClient;
+  files: File[];
+  dataset: string | null;
+  onSubmitted: (jobId: string) => void;
+}) {
+  const [submitting, setSubmitting] = useState(false);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
+
+  const dataRef = preview.dataset ?? dataset ?? null;
+  const useFiles = dataRef === null;
+  const submitted = jobId !== null;
+  const canSubmit = !submitting && !submitted && (!useFiles || files.length > 0);
+
+  async function submit(): Promise<void> {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setError(null);
+    const spec: JobSpec = {
+      workload: preview.workload,
+      params: preview.params,
+      inputs: useFiles ? files.map((file) => ({ name: file.name })) : [],
+    };
+    if (dataRef) spec.dataset = dataRef;
+    try {
+      const created = await api.submitJob(spec, useFiles ? files : []);
+      setJobId(created.job_id);
+      onSubmitted(created.job_id);
+    } catch (cause) {
+      setError(cause);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div className="job-chat-preview">
       <div className="job-chat-preview-head">
@@ -637,6 +831,40 @@ function PreviewBlock({ preview }: { preview: AgentPreview }) {
       </div>
       <code className="job-chat-preview-params">{JSON.stringify(preview.params)}</code>
       {preview.note ? <p>{preview.note}</p> : null}
+
+      <div className="job-chat-preview-submit">
+        <span className="job-chat-preview-source">
+          {dataRef
+            ? "数据来源：数据集 " + dataRef + "（不传文件）"
+            : useFiles && files.length > 0
+              ? "数据来源：待上传 " + files.length + " 个文件"
+              : "数据来源：未选择"}
+        </span>
+        {submitted ? (
+          <>
+            <span className="badge badge--ok">已提交</span>
+            <a href={"#/jobs/" + encodeURIComponent(jobId)}>查看任务 {jobId}</a>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="btn btn--sm btn--primary"
+            onClick={() => void submit()}
+            disabled={!canSubmit}
+            title={
+              !useFiles || files.length > 0
+                ? "按上面的参数提交任务"
+                : "先上传文件，或把数据来源切换成已登记数据集"
+            }
+          >
+            {submitting ? "提交中…" : "确认提交"}
+          </button>
+        )}
+      </div>
+      {!useFiles || files.length > 0 ? null : (
+        <p className="field-hint">先上传文件，或在上方把数据来源切到已登记数据集。</p>
+      )}
+      {error ? <ErrorBox error={error} compact /> : null}
     </div>
   );
 }

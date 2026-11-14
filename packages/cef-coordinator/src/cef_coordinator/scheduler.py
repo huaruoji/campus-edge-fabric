@@ -449,3 +449,20 @@ def _event(conn, kind: str, **fields: Any) -> None:
             fields.get("message"),
         ),
     )
+
+
+def forget_worker(db_path, worker_id: str) -> bool:
+    """Remove a device record (dashboard cleanup).
+
+    Any lease it still holds is requeued first, so deleting a card can never
+    strand a task. Utilization samples are dropped with it.
+    """
+    release_leases(db_path, worker_id, "worker_forgotten")
+    with db.transaction(db_path) as conn:
+        row = db.one(conn, "SELECT id FROM workers WHERE id=?", (worker_id,))
+        if row is None:
+            return False
+        conn.execute("DELETE FROM worker_stats WHERE worker_id=?", (worker_id,))
+        conn.execute("DELETE FROM workers WHERE id=?", (worker_id,))
+        _event(conn, "worker_forgotten", worker_id=worker_id)
+    return True

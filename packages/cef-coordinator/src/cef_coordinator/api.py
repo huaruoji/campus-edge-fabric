@@ -756,3 +756,12 @@ def agent_chat(request: Request, req: AgentChatRequest) -> AgentChatResponse:
         raise _err(503, "agent_unavailable", str(exc)) from exc
     except agent.AgentError as exc:
         raise _err(502, "agent_error", str(exc)) from exc
+
+
+@router.delete("/workers/{worker_id}", status_code=204)
+def forget_worker(request: Request, worker_id: str) -> Response:
+    """Forget a device (dashboard cleanup). Its unstarted leases are requeued first."""
+    s = settings_of(request)
+    if not scheduler.forget_worker(s.db_path, worker_id):
+        raise _err(404, "not_found", f"worker {worker_id} not found")
+    return Response(status_code=204)

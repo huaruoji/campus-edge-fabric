@@ -151,3 +151,29 @@ cef job ls / cef job show <id> / cef job watch <id> / cef job result <id> -o out
 cef workers / cef stats
 ```
 `cef_protocol.client.CefClient` 是同一套调用的 Python SDK（notebook 里可直接用）。
+
+## 6. 内置 agent 与设备清理（v1 增补）
+
+### POST /api/v1/agent/chat
+自然语言 → 校验过的任务预览（不会自己提交）。
+
+```jsonc
+// request
+{"messages": [{"role": "user", "content": "把这批图压成 512 的 webp"}],
+ "context": {"files": [{"name": "a.jpg", "size": 231233}]}}
+
+// response
+{"reply": "已按 512/webp 准备好，确认后即可提交",
+ "preview": {"workload": "thumbnail", "params": {"size": 512, "fmt": "webp", "quality": 80},
+             "task_count": 1, "note": "将以界面已上传的 1 个文件为输入"},
+ "tool_trace": [{"name": "preview_job", "ok": true, "summary": "..."}],
+ "model": "gpt-5.4-mini"}
+```
+
+- 模型在服务端调用，key 只存在于 `/etc/cef/agent.env`，浏览器永远拿不到。
+- 工具：`list_workloads / list_workers / pool_stats / get_job / recent_events / preview_job`。
+- 未配置 key 时返回 **503** `agent_unavailable`。
+
+### DELETE /api/v1/workers/{worker_id}
+删除一台设备记录（清理仪表盘）。它会先把自己持有的未完成任务放回队列，不会丢任务。
+**204** 成功 / **404** 不存在。

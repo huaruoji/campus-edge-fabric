@@ -40,7 +40,10 @@ class Agent:
         self.adapters: dict[str, Workload] = load_adapters(
             enabled=cfg.workloads or None, model_dir=cfg.model_dir, blender_bin=cfg.blender_bin
         )
-        self.worker_id: str | None = None
+        # Device identity must survive restarts: without this, every restart shows
+        # up as a brand-new device on the dashboard and the old one decays to
+        # "offline" forever. Persisted under the worker data dir.
+        self.worker_id: str | None = self._load_worker_id()
         self.slots = max(1, cfg.slots)
         self.max_batch = max(1, cfg.max_batch)
         self.suggested_capacity = self.max_batch
@@ -89,9 +92,28 @@ class Agent:
             },
         }
 
+    @property
+    def _id_file(self) -> Path:
+        return self.cfg.data_dir / "worker.id"
+
+    def _load_worker_id(self) -> str | None:
+        try:
+            value = self._id_file.read_text().strip()
+            return value or None
+        except OSError:
+            return None
+
+    def _save_worker_id(self, worker_id: str) -> None:
+        try:
+            self.cfg.data_dir.mkdir(parents=True, exist_ok=True)
+            self._id_file.write_text(worker_id)
+        except OSError:
+            log.warning("could not persist worker id to %s", self._id_file)
+
     def register(self) -> None:
         resp = self.api.register(self._register_payload())
         self.worker_id = resp["worker_id"]
+        self._save_worker_id(self.worker_id)
         self.suggested_capacity = min(self.max_batch, max(1, resp.get("poll_interval_s") and self.max_batch))
         log.info(
             "registered as %s (%s) with workloads: %s",

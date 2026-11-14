@@ -577,6 +577,9 @@ def pool_stats(request: Request, window: int = Query(300, ge=10, le=86400)) -> P
             conn, "SELECT COUNT(*) n FROM tasks WHERE state='failed' AND finished_at > ?", (since,)
         )["n"]
         queued = db.one(conn, "SELECT COUNT(*) n FROM tasks WHERE state='queued'")["n"]
+        succeeded_total = db.one(conn, "SELECT COUNT(*) n FROM tasks WHERE state='succeeded'")["n"]
+        failed_total = db.one(conn, "SELECT COUNT(*) n FROM tasks WHERE state='failed'")["n"]
+        retries_total = db.one(conn, "SELECT COALESCE(SUM(attempt-1),0) n FROM tasks WHERE state='succeeded'")["n"]
         jobs_total = db.one(conn, "SELECT COUNT(*) n FROM jobs")["n"]
         jobs_running = db.one(conn, "SELECT COUNT(*) n FROM jobs WHERE state IN ('queued','running')")["n"]
         retries = db.one(
@@ -623,6 +626,9 @@ def pool_stats(request: Request, window: int = Query(300, ge=10, le=86400)) -> P
             tasks_succeeded=int(tasks_succeeded),
             tasks_failed=int(failed_in_window),
             tasks_queued=int(queued),
+            tasks_succeeded_total=int(succeeded_total),
+            tasks_failed_total=int(failed_total),
+            retries_total=int(retries_total),
             tasks_per_min=round(tasks_succeeded / (window / 60.0), 2),
             p50_duration_s=round(durations[len(durations) // 2], 3) if durations else None,
             p95_duration_s=round(durations[int(len(durations) * 0.95) - 1 if len(durations) > 1 else 0], 3)

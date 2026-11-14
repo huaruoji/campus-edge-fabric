@@ -24,7 +24,6 @@ const CHAT_PAGE_LIMIT = 200;
 const MAX_CONTEXT_MESSAGES = 12;
 /** 作为上下文带给服务端的文件数上限。 */
 const MAX_CONTEXT_FILES = 200;
-const DEMO_COUNT = 12;
 const NICKNAME_KEY = "cef.nickname";
 const DEFAULT_NICKNAME = "队友";
 
@@ -57,29 +56,6 @@ function normalizeNickname(raw: string): string {
   return raw.replace(/\s+/g, " ").trim().slice(0, 24);
 }
 
-async function makeDemoFiles(): Promise<File[]> {
-  const canvas = document.createElement("canvas");
-  canvas.width = 640;
-  canvas.height = 480;
-  const paint = canvas.getContext("2d");
-  if (!paint) throw new Error("无法生成演示样本，请刷新页面后重试。");
-  const files: File[] = [];
-  for (let index = 0; index < DEMO_COUNT; index += 1) {
-    paint.fillStyle = `hsl(${index * 30} 45% 30%)`;
-    paint.fillRect(0, 0, canvas.width, canvas.height);
-    paint.fillStyle = "#d8e5ff";
-    paint.fillRect(20 + index * 13, 120, 220, 180);
-    const blob = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((result) => {
-        if (result) resolve(result);
-        else reject(new Error("无法生成演示样本，请刷新页面后重试。"));
-      }, "image/png");
-    });
-    files.push(new File([blob], `cef-demo-${index + 1}.png`, { type: blob.type }));
-  }
-  return files;
-}
-
 function isAbortErrorLike(error: unknown): boolean {
   return error instanceof CefApiError && error.kind === "aborted";
 }
@@ -108,7 +84,6 @@ export function JobChat({ api }: { api: ApiClient; token: string }) {
   const [sendError, setSendError] = useState<unknown>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([]);
-  const [demoLoading, setDemoLoading] = useState(false);
   const [tagFilter, setTagFilter] = useState("");
   const [nowTick, setNowTick] = useState(() => Date.now());
 
@@ -277,7 +252,7 @@ export function JobChat({ api }: { api: ApiClient; token: string }) {
     setSendError(null);
     const missing = preset.fileCount - files.length;
     setNotice(missing > 0
-      ? `已把「${preset.title}」的文案填进输入框，还没有发送。该预设需要 ${preset.fileCount} 个文件，当前已载入 ${files.length} 个，先上传 ${missing} 个文件。`
+      ? `已把「${preset.title}」的文案填进输入框，还没有发送。该预设需要 ${preset.fileCount} 个真实文件（来自 ${preset.dataset}），当前已载入 ${files.length} 个，先补 ${missing} 个。`
       : `已把「${preset.title}」的文案填进输入框，还没有发送。确认文案后点「发送」。`);
     textareaRef.current?.focus();
     // 只填文案：这里不发起任何请求。
@@ -301,24 +276,6 @@ export function JobChat({ api }: { api: ApiClient; token: string }) {
       };
     }
     return { available: true, devices: workload.available_on, reason: null };
-  }
-
-  async function loadDemoFiles(): Promise<void> {
-    if (demoLoading) return;
-    setDemoLoading(true);
-    setSendError(null);
-    try {
-      const generated = await makeDemoFiles();
-      setFiles((previous) => {
-        const seen = new Set(previous.map((file) => file.name + ":" + file.size));
-        return [...previous, ...generated.filter((file) => !seen.has(file.name + ":" + file.size))];
-      });
-      setNotice(`已载入 ${generated.length} 个演示样本文件，只塞文件、不会自动发送。`);
-    } catch (error) {
-      setSendError(error);
-    } finally {
-      setDemoLoading(false);
-    }
   }
 
   function handleFileInput(event: ChangeEvent<HTMLInputElement>): void {
@@ -444,7 +401,7 @@ export function JobChat({ api }: { api: ApiClient; token: string }) {
                   ) : null}
                   {preset.fileCount > 0 ? (
                     <span className="preset-files-hint">
-                      需要 {preset.fileCount} 个文件（当前 {files.length} 个）
+                      需要 {preset.fileCount} 个真实文件（当前 {files.length} 个）
                     </span>
                   ) : null}
                 </button>
@@ -455,15 +412,7 @@ export function JobChat({ api }: { api: ApiClient; token: string }) {
 
         <div className="job-chat-sources">
           <div className="job-chat-files">
-            <span className="field-hint">样本文件：已载入 {files.length} 个</span>
-            <button
-              type="button"
-              className="btn btn--sm"
-              onClick={() => void loadDemoFiles()}
-              disabled={demoLoading}
-            >
-              {demoLoading ? "正在生成…" : "载入演示样本（只塞文件）"}
-            </button>
+            <span className="field-hint">待处理文件：{files.length} 个</span>
             <button
               type="button"
               className="btn btn--sm btn--ghost"

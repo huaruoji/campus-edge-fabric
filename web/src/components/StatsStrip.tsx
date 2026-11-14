@@ -21,7 +21,7 @@ export function StatsStrip({ stats, health, onRefresh, hideError = false }: Prop
       <div className="stats">
         <div className="stats-kpis">
           <div className="stat">
-            <span className="stat-label">任务吞吐</span>
+            <span className="stat-label">近 5 分钟吞吐</span>
             <span className="stat-value">
               {formatNumber(data?.tasks_per_min, 2)}
               <span className="stat-unit">tasks/min</span>
@@ -41,11 +41,25 @@ export function StatsStrip({ stats, health, onRefresh, hideError = false }: Prop
         </div>
 
         <div className="stats-overview">
-          <h3 className="overview-title">作业与任务</h3>
+          <h3 className="overview-title">累计</h3>
           <dl className="overview-grid">
             <div>
               <dt>作业总数</dt>
               <dd>{formatNumber(jobs.total)}</dd>
+            </div>
+            <div>
+              <dt>成功任务</dt>
+              <dd>{formatNumber(jobs.succeeded_total ?? jobs.succeeded)}</dd>
+            </div>
+            <div>
+              <dt>失败任务</dt>
+              <dd className={(jobs.failed_total ?? jobs.failed) ? "text-err" : undefined}>
+                {formatNumber(jobs.failed_total ?? jobs.failed)}
+              </dd>
+            </div>
+            <div>
+              <dt>重试次数</dt>
+              <dd>{formatNumber(jobs.retries_total)}</dd>
             </div>
             <div>
               <dt>进行中作业</dt>
@@ -54,14 +68,6 @@ export function StatsStrip({ stats, health, onRefresh, hideError = false }: Prop
             <div>
               <dt>排队任务</dt>
               <dd>{formatNumber(jobs.queued)}</dd>
-            </div>
-            <div>
-              <dt>成功任务</dt>
-              <dd>{formatNumber(jobs.succeeded)}</dd>
-            </div>
-            <div>
-              <dt>失败任务</dt>
-              <dd className={jobs.failed ? "text-err" : undefined}>{formatNumber(jobs.failed)}</dd>
             </div>
           </dl>
         </div>

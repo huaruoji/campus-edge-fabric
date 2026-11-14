@@ -125,6 +125,12 @@ export interface StatsJobs {
   failed?: number;
   partial?: number;
   canceled?: number;
+  /** 累计成功任务数（与上面的窗口值不同） */
+  succeeded_total?: number;
+  /** 累计失败任务数 */
+  failed_total?: number;
+  /** 累计重试次数 */
+  retries_total?: number;
 }
 
 export interface StatsWorker {
@@ -581,6 +587,9 @@ function normalizeStats(raw: unknown): StatsResponse {
     ["tasks_succeeded", "succeeded"],
     ["tasks_failed", "failed"],
     ["tasks_queued", "queued"],
+    ["tasks_succeeded_total", "succeeded_total"],
+    ["tasks_failed_total", "failed_total"],
+    ["retries_total", "retries_total"],
   ];
   for (const [sourceKey, targetKey] of flatJobs) {
     const value = asNumber(r[sourceKey]);

@@ -253,9 +253,14 @@ class PoolStats(_Model):
     workers_online: int = 0
     jobs_total: int = 0
     jobs_running: int = 0
+    #: window-scoped (last `window_s` seconds)
     tasks_succeeded: int = 0
     tasks_failed: int = 0
     tasks_queued: int = 0
+    #: lifetime counters, so the dashboard never has to guess what "0" means
+    tasks_succeeded_total: int = 0
+    tasks_failed_total: int = 0
+    retries_total: int = 0
     tasks_per_min: float | None = None
     p50_duration_s: float | None = None
     p95_duration_s: float | None = None

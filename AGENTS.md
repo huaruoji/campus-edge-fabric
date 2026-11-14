@@ -79,6 +79,8 @@ uv run cef-worker run --server http://127.0.0.1:8080 --token <printed> --workloa
 ```
 
 - Wire contract: `docs/api.md` + `packages/cef-protocol`. Change those first, then both sides.
-- Push to `main` deploys itself: the VPS pulls every 60 s and restarts the coordinator. The dashboard
-  build is committed, so do not leave `web/dist` stale — run `cd web && npm run build` before pushing
-  frontend changes.
+- Push to `main` deploys itself: the VPS pulls every 60 s, runs `npm ci`/`npm run build` when
+  `web/` changed, and restarts the coordinator. You do **not** have to commit the build output — but
+  committing it keeps a fresh clone usable without node.
+- Pull before you push: `git pull --rebase origin main`. Two agents pushing `main` at once is the
+  most common source of rejected pushes here.

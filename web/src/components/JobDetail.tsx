@@ -205,7 +205,10 @@ export function JobDetail({ api, jobId, onBack }: Props) {
                   </thead>
                   <tbody>
                     {job.per_worker.map((row) => {
-                      const share = sharePct(row.total_duration_s, durationTotal);
+                      const share =
+                        row.share !== undefined
+                          ? row.share * 100
+                          : sharePct(row.total_duration_s, durationTotal);
                       return (
                         <tr key={row.worker_id}>
                           <td>
@@ -263,7 +266,7 @@ export function JobDetail({ api, jobId, onBack }: Props) {
                           <td>
                             <StateBadge state={task.state} kind="task" />
                           </td>
-                          <td>{task.worker ?? "—"}</td>
+                          <td>{task.worker_name ?? task.worker ?? "—"}</td>
                           <td className="num">{task.attempt ?? "—"}</td>
                           <td className="num">{formatDuration(task.duration_s)}</td>
                         </tr>

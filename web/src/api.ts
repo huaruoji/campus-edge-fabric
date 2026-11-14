@@ -11,7 +11,7 @@
 /* ---------------------------------- 类型 ---------------------------------- */
 
 export type JobState = "queued" | "running" | "succeeded" | "partial" | "failed" | "canceled";
-export type TaskState = "queued" | "leased" | "succeeded" | "failed";
+export type TaskState = "queued" | "leased" | "succeeded" | "failed" | "canceled";
 export type WorkerState = "online" | "draining" | "offline";
 
 /** JSON Schema 子集（workloads.params_schema），只声明界面会用到的字段。 */
@@ -69,6 +69,8 @@ export interface PerWorkerStat {
   mean_duration_s: number | null;
   total_duration_s: number | null;
   failed?: number;
+  /** 后端给出的成功任务占比（0~1）；老版本可能没有该字段。 */
+  share?: number;
 }
 
 export interface JobTask {
@@ -76,6 +78,7 @@ export interface JobTask {
   idx: number;
   state: TaskState;
   worker?: string | null;
+  worker_name?: string | null;
   attempt?: number;
   duration_s: number | null;
 }
@@ -109,6 +112,7 @@ export interface StatsResponse {
   p50_duration_s: number | null;
   workers: StatsWorker[];
   bottleneck: string | null;
+  workers_online?: number | null;
 }
 
 export interface Workload {
@@ -233,7 +237,7 @@ export function toUserMessage(error: unknown): UserMessage {
 /* --------------------------------- 归一化工具 -------------------------------- */
 
 const JOB_STATES: readonly JobState[] = ["queued", "running", "succeeded", "partial", "failed", "canceled"];
-const TASK_STATES: readonly TaskState[] = ["queued", "leased", "succeeded", "failed"];
+const TASK_STATES: readonly TaskState[] = ["queued", "leased", "succeeded", "failed", "canceled"];
 const WORKER_STATES: readonly WorkerState[] = ["online", "draining", "offline"];
 
 function isJobState(value: unknown): value is JobState {
@@ -329,6 +333,7 @@ function normalizePerWorker(raw: unknown, index: number): PerWorkerStat | null {
     mean_duration_s: asNumberOrNull(r.mean_duration_s),
     total_duration_s: asNumberOrNull(r.total_duration_s),
     failed: asNumber(r.failed),
+    share: asNumber(r.share),
   };
 }
 
@@ -340,6 +345,7 @@ function normalizeTask(raw: unknown, index: number): JobTask | null {
     idx: asNumber(r.idx) ?? index,
     state: isTaskState(r.state) ? r.state : "queued",
     worker: asString(r.worker) ?? null,
+    worker_name: asString(r.worker_name) ?? null,
     attempt: asNumber(r.attempt),
     duration_s: asNumberOrNull(r.duration_s),
   };
@@ -391,6 +397,18 @@ function normalizeStats(raw: unknown): StatsResponse {
       if (typeof value === "number" && Number.isFinite(value)) jobs[key] = value;
     }
   }
+  // 兼容后端 PoolStats 的扁平字段（docs 里画的是 jobs:{...}，实现是 jobs_total 等）。
+  const flatJobs: Array<[string, keyof StatsJobs]> = [
+    ["jobs_total", "total"],
+    ["jobs_running", "running"],
+    ["tasks_succeeded", "succeeded"],
+    ["tasks_failed", "failed"],
+    ["tasks_queued", "queued"],
+  ];
+  for (const [sourceKey, targetKey] of flatJobs) {
+    const value = asNumber(r[sourceKey]);
+    if (value !== undefined && jobs[targetKey] === undefined) jobs[targetKey] = value;
+  }
   const workersRaw = Array.isArray(r.workers) ? r.workers : [];
   return {
     now: asNumber(r.now),
@@ -399,6 +417,7 @@ function normalizeStats(raw: unknown): StatsResponse {
     p50_duration_s: asNumberOrNull(r.p50_duration_s),
     workers: workersRaw.map(normalizeStatsWorker).filter(isNotNull),
     bottleneck: asString(r.bottleneck) ?? null,
+    workers_online: asNumberOrNull(r.workers_online),
   };
 }
 

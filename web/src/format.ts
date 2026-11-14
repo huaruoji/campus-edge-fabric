@@ -16,6 +16,7 @@ export const TASK_STATE_LABELS: Record<TaskState, string> = {
   leased: "执行中",
   succeeded: "完成",
   failed: "失败",
+  canceled: "已取消",
 };
 
 export const WORKER_STATE_LABELS: Record<WorkerState, string> = {

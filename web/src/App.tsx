@@ -61,6 +61,14 @@ export default function App() {
     saveSettings(normalized);
   }
 
+  function refreshAll() {
+    health.refresh();
+    workers.refresh();
+    stats.refresh();
+    jobs.refresh();
+    workloads.refresh();
+  }
+
   function navigate(hash: string) {
     window.location.hash = hash;
   }
@@ -76,14 +84,17 @@ export default function App() {
         </div>
       );
     }
-    if (health.error) {
-      const message = toUserMessage(health.error);
-      const unauthorized = health.error instanceof CefApiError && health.error.kind === "unauthorized";
+    // /health 在后端是免鉴权的，所以 token 错误只能从需要鉴权的接口上看出来。
+    const probeError = health.error ?? workers.error ?? stats.error ?? jobs.error;
+    if (probeError) {
+      const message = toUserMessage(probeError);
+      const kind = probeError instanceof CefApiError ? probeError.kind : "http";
+      if (kind !== "unauthorized" && kind !== "network" && kind !== "server") return null;
       return (
-        <div className={"banner " + (unauthorized ? "banner--err" : "banner--warn")}>
+        <div className={"banner " + (kind === "unauthorized" ? "banner--err" : "banner--warn")}>
           <div className="banner-title">{message.title}</div>
           <div className="banner-detail">{message.detail}</div>
-          <button type="button" className="btn btn--sm btn--ghost" onClick={health.refresh}>
+          <button type="button" className="btn btn--sm btn--ghost" onClick={refreshAll}>
             重新检测
           </button>
         </div>

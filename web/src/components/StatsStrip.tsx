@@ -11,7 +11,7 @@ interface Props {
 
 export function StatsStrip({ stats, health, onRefresh }: Props) {
   const data = stats.data;
-  const online = health.data?.workers_online ?? (data ? data.workers.length : null);
+  const online = health.data?.workers_online ?? data?.workers_online ?? (data ? data.workers.length : null);
   const jobs = data?.jobs ?? {};
 
   return (

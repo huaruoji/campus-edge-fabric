@@ -16,8 +16,10 @@ from contextlib import asynccontextmanager
 
 from cef_protocol.models import ErrorResponse
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import __version__, api, db, scheduler
 from .config import Settings
@@ -99,6 +101,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     status_code=401,
                 )
         return await call_next(request)
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http_error(request: Request, exc: StarletteHTTPException):
+        body = exc.detail if isinstance(exc.detail, dict) and "error" in exc.detail else {
+            "error": {"code": "http_error", "message": str(exc.detail)}
+        }
+        return JSONResponse(body, status_code=exc.status_code, headers=exc.headers)
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_error(request: Request, exc: RequestValidationError):
+        return JSONResponse(
+            {"error": {"code": "invalid_params", "message": "request validation failed"}}, status_code=422
+        )
 
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception):  # type: ignore[no-untyped-def]

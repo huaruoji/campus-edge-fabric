@@ -1,0 +1,522 @@
+{
+  "contract": "cef-worker-v1",
+  "models": [
+    "RegisterRequest",
+    "RegisterResponse",
+    "HeartbeatRequest",
+    "HeartbeatResponse",
+    "PollRequest",
+    "PollResponse",
+    "CompleteMeta",
+    "CompleteResponse",
+    "FailRequest",
+    "FailResponse",
+    "DrainResponse",
+    "ErrorResponse"
+  ],
+  "$defs": {
+    "BlobRef": {
+      "properties": {
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "size": {
+          "default": 0,
+          "title": "Size",
+          "type": "integer"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "sha256",
+        "name"
+      ],
+      "title": "BlobRef",
+      "type": "object"
+    },
+    "CompleteMeta": {
+      "properties": {
+        "attempt": {
+          "title": "Attempt",
+          "type": "integer"
+        },
+        "duration_s": {
+          "title": "Duration S",
+          "type": "number"
+        },
+        "output": {
+          "additionalProperties": true,
+          "title": "Output",
+          "type": "object"
+        },
+        "output_names": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Output Names",
+          "type": "array"
+        }
+      },
+      "required": [
+        "attempt",
+        "duration_s"
+      ],
+      "title": "CompleteMeta",
+      "type": "object"
+    },
+    "CompleteResponse": {
+      "properties": {
+        "ok": {
+          "default": true,
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "credited": {
+          "default": false,
+          "title": "Credited",
+          "type": "boolean"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        }
+      },
+      "title": "CompleteResponse",
+      "type": "object"
+    },
+    "DrainResponse": {
+      "properties": {
+        "worker_id": {
+          "title": "Worker Id",
+          "type": "string"
+        },
+        "released": {
+          "default": 0,
+          "title": "Released",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "worker_id"
+      ],
+      "title": "DrainResponse",
+      "type": "object"
+    },
+    "ErrorInfo": {
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "ErrorInfo",
+      "type": "object"
+    },
+    "ErrorResponse": {
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/ErrorInfo"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "title": "ErrorResponse",
+      "type": "object"
+    },
+    "FailRequest": {
+      "properties": {
+        "attempt": {
+          "title": "Attempt",
+          "type": "integer"
+        },
+        "error": {
+          "title": "Error",
+          "type": "string"
+        },
+        "retryable": {
+          "default": true,
+          "title": "Retryable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "attempt",
+        "error"
+      ],
+      "title": "FailRequest",
+      "type": "object"
+    },
+    "FailResponse": {
+      "properties": {
+        "requeued": {
+          "default": false,
+          "title": "Requeued",
+          "type": "boolean"
+        },
+        "attempts_left": {
+          "default": 0,
+          "title": "Attempts Left",
+          "type": "integer"
+        }
+      },
+      "title": "FailResponse",
+      "type": "object"
+    },
+    "HeartbeatRequest": {
+      "properties": {
+        "stats": {
+          "$ref": "#/$defs/HeartbeatStats"
+        },
+        "leases": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Leases",
+          "type": "array"
+        }
+      },
+      "title": "HeartbeatRequest",
+      "type": "object"
+    },
+    "HeartbeatResponse": {
+      "properties": {
+        "lease_ttl_s": {
+          "default": 90,
+          "title": "Lease Ttl S",
+          "type": "integer"
+        },
+        "poll_now": {
+          "default": true,
+          "title": "Poll Now",
+          "type": "boolean"
+        },
+        "drain": {
+          "default": false,
+          "title": "Drain",
+          "type": "boolean"
+        }
+      },
+      "title": "HeartbeatResponse",
+      "type": "object"
+    },
+    "HeartbeatStats": {
+      "properties": {
+        "cpu_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cpu Pct"
+        },
+        "mem_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mem Pct"
+        },
+        "gpu_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gpu Pct"
+        },
+        "running": {
+          "default": 0,
+          "title": "Running",
+          "type": "integer"
+        }
+      },
+      "title": "HeartbeatStats",
+      "type": "object"
+    },
+    "Lease": {
+      "properties": {
+        "task_id": {
+          "title": "Task Id",
+          "type": "string"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "idx": {
+          "title": "Idx",
+          "type": "integer"
+        },
+        "attempt": {
+          "title": "Attempt",
+          "type": "integer"
+        },
+        "workload": {
+          "title": "Workload",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        },
+        "inputs": {
+          "items": {
+            "$ref": "#/$defs/BlobRef"
+          },
+          "title": "Inputs",
+          "type": "array"
+        },
+        "lease_expires_at": {
+          "title": "Lease Expires At",
+          "type": "number"
+        },
+        "lease_ttl_s": {
+          "title": "Lease Ttl S",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_id",
+        "job_id",
+        "idx",
+        "attempt",
+        "workload",
+        "lease_expires_at",
+        "lease_ttl_s"
+      ],
+      "title": "Lease",
+      "type": "object"
+    },
+    "PollRequest": {
+      "properties": {
+        "capacity": {
+          "default": 1,
+          "maximum": 64,
+          "minimum": 0,
+          "title": "Capacity",
+          "type": "integer"
+        },
+        "workloads": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Workloads",
+          "type": "array"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        }
+      },
+      "title": "PollRequest",
+      "type": "object"
+    },
+    "PollResponse": {
+      "properties": {
+        "leases": {
+          "items": {
+            "$ref": "#/$defs/Lease"
+          },
+          "title": "Leases",
+          "type": "array"
+        },
+        "suggested_capacity": {
+          "default": 1,
+          "title": "Suggested Capacity",
+          "type": "integer"
+        }
+      },
+      "title": "PollResponse",
+      "type": "object"
+    },
+    "RegisterRequest": {
+      "properties": {
+        "worker_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Worker Id"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "hostname": {
+          "default": "",
+          "title": "Hostname",
+          "type": "string"
+        },
+        "os": {
+          "default": "",
+          "title": "Os",
+          "type": "string"
+        },
+        "cpu_count": {
+          "default": 1,
+          "title": "Cpu Count",
+          "type": "integer"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "slots": {
+          "default": 1,
+          "title": "Slots",
+          "type": "integer"
+        },
+        "max_batch": {
+          "default": 4,
+          "title": "Max Batch",
+          "type": "integer"
+        },
+        "workloads": {
+          "items": {
+            "$ref": "#/$defs/WorkloadSupport"
+          },
+          "title": "Workloads",
+          "type": "array"
+        },
+        "meta": {
+          "additionalProperties": true,
+          "title": "Meta",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "RegisterRequest",
+      "type": "object"
+    },
+    "RegisterResponse": {
+      "properties": {
+        "worker_id": {
+          "title": "Worker Id",
+          "type": "string"
+        },
+        "lease_ttl_s": {
+          "default": 90,
+          "title": "Lease Ttl S",
+          "type": "integer"
+        },
+        "heartbeat_interval_s": {
+          "default": 5,
+          "title": "Heartbeat Interval S",
+          "type": "integer"
+        },
+        "poll_interval_s": {
+          "default": 1.0,
+          "title": "Poll Interval S",
+          "type": "number"
+        }
+      },
+      "required": [
+        "worker_id"
+      ],
+      "title": "RegisterResponse",
+      "type": "object"
+    },
+    "WorkloadSupport": {
+      "properties": {
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "available": {
+          "default": true,
+          "title": "Available",
+          "type": "boolean"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "WorkloadSupport",
+      "type": "object"
+    }
+  }
+}

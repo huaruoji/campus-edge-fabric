@@ -126,12 +126,18 @@ uv run python benchmarks/bench.py \
 
 | 人 | 负责 | 目录 |
 |---|---|---|
-| A | 调度正确性、租约/fencing、实验脚本、性能结论 | `packages/cef-coordinator`、`benchmarks/` |
+| A | Coordinator、调度正确性、租约/fencing、接口与集成 | `packages/cef-coordinator`、`packages/cef-protocol` |
 | B | Worker agent、workload adapter（infer / blender）、依赖检测 | `packages/cef-worker` |
-| C | 仪表盘、提交体验、结果下载、演示脚本 | `web/`、`deploy/` |
-| D | 产品故事、成本估算、README/材料、现场流程串演 | `docs/`、README |
+| C | 仪表盘、提交体验、结果下载、前端联调 | `web/` |
+| D | 独立测试、性能对照、技术验收、README 与技术演示 | `benchmarks/`、测试、`docs/`、README |
+
+以上为四位技术成员；商业化另有一位成员负责，不作为当前技术交付前置条件。
 
 接口改动只走 `packages/cef-protocol` + `docs/api.md`，谁改谁先同步。
+
+Coordinator/Worker 对接请先读 [固定契约 v1](docs/worker-contract-v1.md)。
+共享模型快照为 [worker-schema-v1.json](docs/worker-schema-v1.json)，契约测试随 `pytest` 执行。
+此前的五份任务 Markdown 保存在 [历史排期目录](docs/team-plan/)；其中 OCR 和旧路径草案不覆盖当前仓库协议。
 
 ## 7. 未完成 / 明确声明
 

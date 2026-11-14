@@ -302,3 +302,45 @@ class JobManifest(_Model):
 
 
 SORT_DESC = Literal["asc", "desc"]
+
+# ---------------------------------------------------------------- agent (chat)
+class ChatMessage(_Model):
+    role: Literal["user", "assistant", "system"]
+    content: str
+
+
+class AgentFile(_Model):
+    name: str
+    size: int = 0
+
+
+class AgentContext(_Model):
+    files: list[AgentFile] = Field(default_factory=list)
+    job_id: str | None = None
+
+
+class AgentChatRequest(_Model):
+    messages: list[ChatMessage] = Field(default_factory=list)
+    context: AgentContext = Field(default_factory=AgentContext)
+
+
+class AgentPreview(_Model):
+    workload: str
+    params: dict[str, Any] = Field(default_factory=dict)
+    task_count: int | None = None
+    note: str = ""
+
+
+class AgentToolTrace(_Model):
+    name: str
+    args: dict[str, Any] = Field(default_factory=dict)
+    ok: bool = True
+    summary: str = ""
+
+
+class AgentChatResponse(_Model):
+    reply: str
+    preview: AgentPreview | None = None
+    tool_trace: list[AgentToolTrace] = Field(default_factory=list)
+    model: str = ""
+    usage: dict[str, Any] | None = None

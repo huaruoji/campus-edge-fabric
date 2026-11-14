@@ -1,5 +1,7 @@
 # Coordinator / Worker 联调记录（2026-11-14）
 
+工作归属、阶段完成情况及 A/B/C/D 后续任务见 [技术分工与交接表](team-handoff.md)。本记录描述本轮验证，不替代真实双机和最终交付版本的验收。
+
 ## 范围
 
 从 main 的 `ae06e05` 开始检查，期间同步至 `5064b96`，保留设备身份持久化、设备删除和服务端 agent 更新。测试环境为 Windows / Python 3.12，本机真实 loopback HTTP Coordinator，两个独立 CLI Worker 进程，Pillow 执行 thumbnail。

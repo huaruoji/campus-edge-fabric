@@ -1,0 +1,35 @@
+{
+  "images_checked": 428,
+  "bsds_train": 200,
+  "bsds_test": 100,
+  "coco_images": 128,
+  "coco_label_files": 128,
+  "coco_boxes": 941,
+  "scope": "Image decodability and YOLO label syntax only; no inference or rendering performed.",
+  "source_dataset_pairing_issues": {
+    "images_without_same_stem_label": [
+      "000000000250.jpg",
+      "000000000508.jpg"
+    ],
+    "labels_without_same_stem_image": [
+      "000000000656.txt",
+      "000000000659.txt"
+    ],
+    "matched_pairs": 126,
+    "action": "Original files preserved. Only matched pairs enter quality/benchmark subsets; unmatched images are in ready/infer/unlabeled/images, and are not assumed to be negative samples."
+  },
+  "image_or_label_syntax_errors": [],
+  "ready_counts": {
+    "thumbnail": {
+      "smoke": 16,
+      "warmup": 16,
+      "benchmark": 100
+    },
+    "infer": {
+      "smoke": 8,
+      "warmup": 8,
+      "benchmark": 110,
+      "unlabeled": 2
+    }
+  }
+}

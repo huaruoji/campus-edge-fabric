@@ -171,6 +171,8 @@ uv run python benchmarks/bench.py \
 
 以上为四位技术成员；商业化另有一位成员负责，不作为当前技术交付前置条件。
 
+**当前交接状态见 [技术分工与交接表](docs/team-handoff.md)。** 本轮主要完成 A 的接口固定与整体联调，同时修复 B 的 Worker 心跳问题、补充 D 的自动化回归。B 的真实双机部署、C 的页面专项验收、D 的跨设备性能验证仍需继续；本机双进程测试不等于真实双机验收。
+
 接口改动只走 `packages/cef-protocol` + `docs/api.md`，谁改谁先同步。
 
 Coordinator/Worker 对接请先读 [固定契约 v1](docs/worker-contract-v1.md)。

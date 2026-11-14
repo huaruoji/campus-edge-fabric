@@ -114,6 +114,30 @@ def _infer(model_dir: Path, dry_run: bool) -> RecipeResult:
         result.ok = False
         return result
 
+    # a GPU build that cannot load its CUDA runtime silently runs on the CPU,
+    # so check where inference would actually execute
+    try:
+        from .workloads.infer import InferWorkload
+
+        engine = InferWorkload(model_dir=model_dir).probe().get("engine")
+    except Exception:  # noqa: BLE001
+        engine = None
+    if engine:
+        result.steps.append(
+            Step(
+                "effective engine",
+                engine == "cuda" or not has_gpu,
+                f"inference runs on {engine}" + ("" if engine == "cuda" else " (GPU 未生效)"),
+                None
+                if engine == "cuda" or not has_gpu
+                else "uv pip install onnxruntime-gpu==1.22.0 nvidia-cublas-cu12 nvidia-cudnn-cu12 "
+                "nvidia-cudnn-cu12 nvidia-curand-cu12 nvidia-cufft-cu12 nvidia-cuda-runtime-cu12 "
+                "--python .venv/bin/python（或重跑 provision）",
+            )
+        )
+        if has_gpu and engine != "cuda":
+            result.ok = False
+
     for name, want in required.items():
         path = model_dir / f"{name}.onnx"
         if not path.exists():

@@ -24,6 +24,27 @@ _MODEL_HASH_CACHE: dict[tuple[str, float, int], dict[str, Any]] = {}
 
 
 _ENGINE_CACHE: dict[tuple[str, float, int], str] = {}
+_PRELOADED = False
+
+
+def _preload_cuda() -> None:
+    """Load the pip-installed CUDA/cuDNN libs before the first session.
+
+    Without this, onnxruntime-gpu silently falls back to CPUExecutionProvider when
+    the CUDA runtime lives in site-packages/nvidia/* instead of the system loader
+    path (which is the normal case inside a venv, and on WSL).
+    """
+    global _PRELOADED
+    if _PRELOADED:
+        return
+    _PRELOADED = True
+    try:
+        import onnxruntime as ort
+
+        if hasattr(ort, "preload_dlls"):
+            ort.preload_dlls()
+    except Exception:  # noqa: BLE001 - CPU-only installs simply have nothing to load
+        pass
 
 
 def _effective_engine(model_dir: Path) -> str:
@@ -43,6 +64,7 @@ def _effective_engine(model_dir: Path) -> str:
     if cached:
         return cached
     try:
+        _preload_cuda()
         providers = [p for p in ("CUDAExecutionProvider", "CPUExecutionProvider") if p in ort.get_available_providers()]
         sess = ort.InferenceSession(str(path), providers=providers or None)
         engine = "cuda" if "CUDAExecutionProvider" in sess.get_providers() else "cpu"
@@ -139,6 +161,7 @@ class InferWorkload(Workload):
             raise WorkloadError(f"model not found: {model} (looked in {self.model_dir})", retryable=False)
         key = (str(path), device + ort.get_available_providers().__str__())
         if key not in _SESSION_CACHE:
+            _preload_cuda()
             providers = [p for p in ("CUDAExecutionProvider", "CPUExecutionProvider") if p in ort.get_available_providers()]
             if device != "auto":
                 wanted = "CPUExecutionProvider" if device == "cpu" else "CUDAExecutionProvider"

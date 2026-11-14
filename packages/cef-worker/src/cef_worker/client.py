@@ -3,11 +3,23 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from pathlib import Path
 from typing import Any
 
 import httpx
+from cef_protocol.models import (
+    CompleteMeta,
+    CompleteResponse,
+    DrainResponse,
+    FailRequest,
+    FailResponse,
+    HeartbeatRequest,
+    HeartbeatResponse,
+    PollRequest,
+    PollResponse,
+    RegisterRequest,
+    RegisterResponse,
+)
 
 API = "/api/v1"
 
@@ -46,24 +58,28 @@ class WorkerAPI:
 
     # ------------------------------------------------------------------ worker
     def register(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self._call("POST", "/workers/register", json=payload).json()
+        body = RegisterRequest.model_validate(payload).model_dump(mode="json")
+        return RegisterResponse.model_validate(self._call("POST", "/workers/register", json=body).json()).model_dump()
 
     def heartbeat(self, worker_id: str, stats: dict[str, Any], leases: list[str]) -> dict[str, Any]:
-        body = {"stats": stats, "leases": leases}
-        return self._call("POST", f"/workers/{worker_id}/heartbeat", json=body).json()
+        body = HeartbeatRequest(stats=stats, leases=leases).model_dump(mode="json")
+        response = self._call("POST", f"/workers/{worker_id}/heartbeat", json=body)
+        return HeartbeatResponse.model_validate(response.json()).model_dump()
 
     def poll(self, worker_id: str, capacity: int, workloads: list[str], tags: list[str]) -> dict[str, Any]:
-        body = {"capacity": capacity, "workloads": workloads, "tags": tags}
-        return self._call("POST", f"/workers/{worker_id}/poll", json=body).json()
+        body = PollRequest(capacity=capacity, workloads=workloads, tags=tags).model_dump(mode="json")
+        response = self._call("POST", f"/workers/{worker_id}/poll", json=body)
+        return PollResponse.model_validate(response.json()).model_dump()
 
     def complete(
         self, worker_id: str, task_id: str, meta: dict[str, Any], files: list[Path]
     ) -> tuple[bool, str | None]:
+        meta = CompleteMeta.model_validate(meta).model_dump(mode="json")
         handles = []
         try:
             for f in files:
                 handles.append(("files", (f.name, f.open("rb"), "application/octet-stream")))
-            data = {"meta": json.dumps(meta)}
+            data = {"meta": CompleteMeta.model_validate(meta).model_dump_json()}
             resp = self._client.post(
                 f"{API}/workers/{worker_id}/tasks/{task_id}/complete",
                 data=data,
@@ -78,14 +94,17 @@ class WorkerAPI:
             return False, "stale_attempt"
         if resp.status_code >= 400:
             raise ApiError(resp.status_code, "complete_failed", resp.text[:300])
-        return True, None
+        result = CompleteResponse.model_validate(resp.json())
+        return result.ok and result.credited, result.reason
 
     def fail(self, worker_id: str, task_id: str, attempt: int, error: str, retryable: bool) -> dict[str, Any]:
-        body = {"attempt": attempt, "error": error[:2000], "retryable": retryable}
-        return self._call("POST", f"/workers/{worker_id}/tasks/{task_id}/fail", json=body).json()
+        body = FailRequest(attempt=attempt, error=error[:2000], retryable=retryable).model_dump(mode="json")
+        response = self._call("POST", f"/workers/{worker_id}/tasks/{task_id}/fail", json=body)
+        return FailResponse.model_validate(response.json()).model_dump()
 
     def drain(self, worker_id: str) -> None:
-        self._call("POST", f"/workers/{worker_id}/drain")
+        response = self._call("POST", f"/workers/{worker_id}/drain")
+        DrainResponse.model_validate(response.json())
 
     # -------------------------------------------------------------------- blobs
     def fetch_blob(self, sha: str, dest: Path) -> Path:

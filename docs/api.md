@@ -1,6 +1,7 @@
 # CEF API v1 — 接口契约（冻结版）
 
 > 这是 Coordinator 与所有客户端（Web / CLI / SDK / Worker Agent）之间的**唯一**契约。
+> Worker 对接的规范补充、边界行为与联调步骤见 [worker-contract-v1.md](worker-contract-v1.md)，机器可读模型见 [worker-schema-v1.json](worker-schema-v1.json)。
 > 改接口先改这个文件 + `packages/cef-protocol`，再改实现。CI 会跑契约测试。
 
 ## 0. 约定
@@ -27,8 +28,8 @@ Job (一次用户提交)  ──1:N──> Task (最小调度单元)
 
 ```
 Task:   queued --claim--> leased --complete--> succeeded
-                            │  └--fail(retryable)--> queued (attempt+1)
-                            │  └--lease expired----> queued (attempt+1)  [reaper]
+                            │  └--fail(retryable)--> queued (下次 claim 时 attempt+1)
+                            │  └--lease expired----> queued (下次 claim 时 attempt+1)  [reaper]
                             └--fail(final)/attempt>max--> failed
 Job:    queued --> running --> succeeded | partial | failed | canceled
 Worker: online <--> draining --> offline (heartbeat 超时)
@@ -119,18 +120,21 @@ manifest 含每个 task 的 `worker_id / attempt / duration_s / output_sha256`�
 
 ### POST /api/v1/workers/{id}/poll
 `{"capacity": 3, "workloads": ["thumbnail","infer"], "tags": []}`
-→ `{"leases": [{"task_id","job_id","idx","attempt","workload","params",
+→ `{"suggested_capacity": 1, "leases": [{"task_id","job_id","idx","attempt","workload","params",
    "inputs":[{"name","sha256","size","url"}],"lease_expires_at","lease_ttl_s"}]}`
 `url` 是 `/api/v1/blobs/{sha256}` 相对路径，worker 直接用同一 token 拉取。
+`capacity=0` 明确不领任务；无任务为 200 空 leases（不是 204）。非 online 节点不领任务；workloads 与注册的 available 能力求交集。tags 以注册信息为准。
 
 ### POST /api/v1/workers/{id}/tasks/{task_id}/complete
-multipart：`meta` = JSON `{attempt, duration_s, output:{...}, error:null}`，`files` = 输出文件。
-→ 200 `{ok:true, credited:true}`；fencing 不匹配 → **409** `{ok:false, reason:"stale_attempt"}`（worker 丢弃，不重试）
+multipart：`meta` = JSON `{attempt, duration_s, output:{...}, output_names:[]}`，`files` = 输出文件。
+→ 200 `{ok:true, credited:true}`；fencing 不匹配 → **409** `{"error":{"code":"stale_attempt","message":"result not credited"}}`（worker 丢弃，不重试）
 
 ### POST /api/v1/workers/{id}/tasks/{task_id}/fail
 `{"attempt": 2, "error": "CUDA OOM", "retryable": true}` → `{requeued: true, attempts_left: 1}`
 
-### POST /api/v1/workers/{id}/drain → 202（释放未开始租约，跑完手上的）
+### POST /api/v1/workers/{id}/drain → 202 `{worker_id,released}`
+
+立即释放该 worker 所有未完成租约；不区分已开始和未开始。优雅停止须先停止 poll、保持心跳并等待本机任务完成，再调用 drain。
 
 ### GET /api/v1/blobs/{sha256} → 原始字节（输入/输出文件下载）
 

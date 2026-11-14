@@ -184,6 +184,11 @@ class FailResponse(_Model):
     attempts_left: int = 0
 
 
+class DrainResponse(_Model):
+    worker_id: str
+    released: int = 0
+
+
 class WorkerView(_Model):
     worker_id: str
     name: str

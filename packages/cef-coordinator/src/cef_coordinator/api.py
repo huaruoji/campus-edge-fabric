@@ -16,6 +16,7 @@ from cef_protocol import new_id
 from cef_protocol.models import (
     CompleteMeta,
     CompleteResponse,
+    DrainResponse,
     FailRequest,
     FailResponse,
     Health,
@@ -363,8 +364,10 @@ def worker_poll(request: Request, worker_id: str, poll: PollRequest) -> PollResp
         conn.close()
     if worker is None:
         raise _err(404, "not_found", "unknown worker, re-register")
-    want = poll.capacity if poll.capacity else scheduler.suggested_capacity(worker, s)
-    leases = scheduler.claim(s.db_path, s, worker, want, poll.workloads)
+    available = {w["kind"] for w in json.loads(worker["workloads"]) if w.get("available", True)}
+    workloads = [kind for kind in poll.workloads if kind in available]
+    want = poll.capacity if worker["state"] == "online" else 0
+    leases = scheduler.claim(s.db_path, s, worker, want, workloads)
     latest = db.reading(s.db_path)
     try:
         row = db.one(latest, "SELECT * FROM workers WHERE id=?", (worker_id,))
@@ -418,12 +421,12 @@ def task_fail(request: Request, worker_id: str, task_id: str, fail: FailRequest)
     return FailResponse(requeued=requeued, attempts_left=left)
 
 
-@router.post("/workers/{worker_id}/drain", status_code=202)
-def worker_drain(request: Request, worker_id: str) -> dict[str, Any]:
+@router.post("/workers/{worker_id}/drain", status_code=202, response_model=DrainResponse)
+def worker_drain(request: Request, worker_id: str) -> DrainResponse:
     s = settings_of(request)
     scheduler.set_state(s.db_path, worker_id, "draining")
     released = scheduler.release_leases(s.db_path, worker_id, "drained")
-    return {"worker_id": worker_id, "released": released}
+    return DrainResponse(worker_id=worker_id, released=released)
 
 
 @router.get("/workers", response_model=WorkerList)

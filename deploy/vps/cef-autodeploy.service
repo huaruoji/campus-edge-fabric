@@ -1,0 +1,7 @@
+[Unit]
+Description=Campus Edge Fabric autodeploy (pull main, restart coordinator)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/campus-edge-fabric/deploy/vps/autodeploy.sh

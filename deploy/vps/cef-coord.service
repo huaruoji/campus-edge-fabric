@@ -6,12 +6,13 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/campus-edge-fabric
-Environment=CEF_TOKEN_FILE=/etc/cef/token
 Environment=CEF_DATA=/var/lib/cef
-ExecStart=/root/.local/bin/uv run --frozen --project /opt/campus-edge-fabric cef-coord serve --host 127.0.0.1 --port 8090 --data /var/lib/cef --token-file /etc/cef/token
+Environment=PYTHONUNBUFFERED=1
+# Call the venv entrypoint directly: no uv, no network, no $HOME at runtime.
+# (ProtectHome=true hides /root, so anything installed there is invisible to us.)
+ExecStart=/opt/campus-edge-fabric/.venv/bin/cef-coord serve --host 127.0.0.1 --port 8090 --data /var/lib/cef --token-file /etc/cef/token
 Restart=always
 RestartSec=3
-# the coordinator never needs to run user code; lock it down
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict

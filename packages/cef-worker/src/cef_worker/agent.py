@@ -48,6 +48,8 @@ class Agent:
         self._active: dict[str, Future[Any]] = {}
         self._active_lock = threading.Lock()
         self._stop = threading.Event()
+        self._heartbeat_stop = threading.Event()
+        self._heartbeat_thread: threading.Thread | None = None
         self._drain_requested = threading.Event()
         self.completed = 0
         self.failed = 0
@@ -92,7 +94,9 @@ class Agent:
     def register(self) -> None:
         resp = self.api.register(self._register_payload())
         self.worker_id = resp["worker_id"]
-        self.suggested_capacity = min(self.max_batch, max(1, resp.get("poll_interval_s") and self.max_batch))
+        self.cfg.heartbeat_interval_s = max(0.1, float(resp["heartbeat_interval_s"]))
+        self.cfg.poll_interval_s = max(0.1, float(resp["poll_interval_s"]))
+        self.suggested_capacity = self.max_batch
         log.info(
             "registered as %s (%s) with workloads: %s",
             self.worker_id,
@@ -102,7 +106,7 @@ class Agent:
 
     # -------------------------------------------------------------- heartbeat
     def _heartbeat_loop(self) -> None:
-        while not self._stop.is_set():
+        while not self._heartbeat_stop.is_set():
             try:
                 sample = self.monitor.sample()
                 self.last_sample = sample
@@ -128,13 +132,14 @@ class Agent:
                     log.warning("heartbeat failed: %s", exc)
             except Exception as exc:  # noqa: BLE001
                 log.warning("heartbeat error: %s", exc)
-            self._stop.wait(self.cfg.heartbeat_interval_s)
+            self._heartbeat_stop.wait(self.cfg.heartbeat_interval_s)
 
     # -------------------------------------------------------------------- loop
     def run(self) -> None:
         self.cfg.ensure_dirs()
         self.register()
         hb = threading.Thread(target=self._heartbeat_loop, name="cef-heartbeat", daemon=True)
+        self._heartbeat_thread = hb
         hb.start()
         log.info("slots=%d max_batch=%d tags=%s", self.slots, self.max_batch, self.cfg.tags or "-")
         try:
@@ -153,6 +158,8 @@ class Agent:
             self.shutdown()
 
     def _capacity(self) -> int:
+        if self._stop.is_set() or self._drain_requested.is_set():
+            return 0
         with self._active_lock:
             running = len(self._active)
         free = self.slots - running
@@ -271,7 +278,14 @@ class Agent:
             pending = list(self._active.keys())
         if pending:
             log.info("waiting for %d in-flight task(s)", len(pending))
-        self._executor.shutdown(wait=True, cancel_futures=False)
+        # Stop admitting work first, but keep leases alive until the final upload.
+        # _stop controls polling; heartbeat has a separate lifecycle.
+        try:
+            self._executor.shutdown(wait=True, cancel_futures=False)
+        finally:
+            self._heartbeat_stop.set()
+            if self._heartbeat_thread is not None:
+                self._heartbeat_thread.join(timeout=65)
         if self.worker_id:
             try:
                 self.api.drain(self.worker_id)

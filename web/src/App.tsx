@@ -12,12 +12,29 @@ import { EmptyBox } from "./components/ui";
 
 type Route = { name: "devices" } | { name: "submit" } | { name: "jobs" } | { name: "job"; jobId: string };
 
+type NavName = "devices" | "submit" | "jobs";
+
 const ROUTE_TITLES: Record<Route["name"], string> = {
-  devices: "设备面板",
-  submit: "算力助手",
+  // 各页内部的区块标题由 WorkerPanel / JobChat / JobDetail 提供，
+  // 页头标题刻意不与这些区块标题重复（设备面板 / 算力助手 / 任务列表）。
+  devices: "集群概览",
+  submit: "提交任务",
   jobs: "任务列表",
   job: "任务详情",
 };
+
+const ROUTE_DESCRIPTIONS: Record<Route["name"], string> = {
+  devices: "查看每台边缘节点的在线状态、负载与吞吐；离线设备可以移除记录。",
+  submit: "用一句话描述要做的处理，助手会给出工作负载与参数，确认后提交。",
+  jobs: "按创建时间倒序显示最近 50 个作业，点击任务名查看明细。",
+  job: "单个作业的进度、按设备分解和结果包下载。",
+};
+
+const NAV_ITEMS: Array<{ hash: string; name: NavName; label: string }> = [
+  { hash: "#/devices", name: "devices", label: "设备面板" },
+  { hash: "#/submit", name: "submit", label: "算力助手" },
+  { hash: "#/jobs", name: "jobs", label: "任务列表" },
+];
 
 function parseRoute(hash: string): Route {
   const path = hash.replace(/^#\/?/, "");
@@ -38,6 +55,8 @@ export default function App() {
   const [settings, setSettings] = useState<ConnectionSettings>(() => loadSettings());
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.hash));
   const [connectionVersion, setConnectionVersion] = useState(0);
+  const [connectionOpen, setConnectionOpen] = useState(false);
+  const [tokenFocusSignal, setTokenFocusSignal] = useState(0);
   const mainRef = useRef<HTMLElement>(null);
   const focusOnNavigation = useRef(false);
 
@@ -89,6 +108,11 @@ export default function App() {
     window.location.hash = hash;
   }
 
+  function openConnectionPanel() {
+    setConnectionOpen(true);
+    setTokenFocusSignal((value) => value + 1);
+  }
+
   const errors = [health.error, workers.error, stats.error, jobs.error];
   const connectionErrors = errors.filter((error): error is CefApiError => error instanceof CefApiError);
   const bannerError = connectionErrors.find((error) => error.kind === "unauthorized")
@@ -118,42 +142,78 @@ export default function App() {
   }
 
   const runningJobs = stats.data?.jobs.running;
-  const activeTab = route.name === "job" ? "jobs" : route.name;
+  const activeNav: NavName = route.name === "job" ? "jobs" : route.name;
+  const versionLabel = health.data?.version ? "v" + health.data.version : "校园边缘算力调度";
 
   return (
-    <div className="app">
-      <ConnectionBar
-        settings={settings}
-        health={health}
-        onApply={applySettings}
-        probeError={bannerError}
-        authenticated={workers.data !== null || stats.data !== null || jobs.data !== null}
-      />
+    <div className="app-shell">
+      <aside className={"app-sidebar" + (connectionOpen ? " app-sidebar--conn-open" : "")}>
+        <div className="sidebar-brand">
+          <span className="brand-mark" aria-hidden="true">
+            CEF
+          </span>
+          <span className="brand-text">
+            <span className="brand-name">Campus Edge Fabric</span>
+            <span className="brand-version">{versionLabel}</span>
+          </span>
+        </div>
 
-      <nav className="tabs" aria-label="主导航">
-        <a className={"tab" + (activeTab === "devices" ? " tab--active" : "")} href="#/devices" aria-current={activeTab === "devices" ? "page" : undefined}>
-          设备面板
-        </a>
-        <a className={"tab" + (activeTab === "submit" ? " tab--active" : "")} href="#/submit" aria-current={activeTab === "submit" ? "page" : undefined}>
-          算力助手
-        </a>
-        <a className={"tab" + (activeTab === "jobs" ? " tab--active" : "")} href="#/jobs" aria-current={activeTab === "jobs" ? "page" : undefined}>
-          任务列表
-          {typeof runningJobs === "number" && runningJobs > 0 ? (
-            <span className="tab-count">{runningJobs}</span>
-          ) : null}
-        </a>
-      </nav>
+        <nav className="sidebar-nav" aria-label="主导航">
+          {NAV_ITEMS.map((item) => (
+            <a
+              key={item.hash}
+              className="nav-link"
+              href={item.hash}
+              aria-current={activeNav === item.name ? "page" : undefined}
+            >
+              {item.label}
+              {item.name === "jobs" && typeof runningJobs === "number" && runningJobs > 0 ? (
+                <span className="nav-count">
+                  {runningJobs}
+                  <span className="visually-hidden"> 个作业进行中</span>
+                </span>
+              ) : null}
+            </a>
+          ))}
+        </nav>
+
+        <div className="sidebar-foot">
+          <ConnectionBar
+            settings={settings}
+            health={health}
+            onApply={applySettings}
+            probeError={bannerError}
+            authenticated={workers.data !== null || stats.data !== null || jobs.data !== null}
+            open={connectionOpen}
+            onOpenChange={setConnectionOpen}
+            focusTokenSignal={tokenFocusSignal}
+          />
+        </div>
+      </aside>
 
       <main className="app-main" ref={mainRef} tabIndex={-1} aria-label={ROUTE_TITLES[route.name]}>
+        <header className="page-head">
+          <div className="page-head-text">
+            <h1 className="page-title">{ROUTE_TITLES[route.name]}</h1>
+            <p className="page-desc">{ROUTE_DESCRIPTIONS[route.name]}</p>
+          </div>
+          {ready && (route.name === "devices" || route.name === "jobs") ? (
+            <div className="page-actions">
+              <button type="button" className="btn btn--sm btn--ghost" onClick={refreshAll}>
+                刷新数据
+              </button>
+            </div>
+          ) : null}
+        </header>
+
         {renderBanner()}
 
         {!ready ? (
           <EmptyBox
             title="连接到算力池"
-            hint="向队长获取访问 Token，填入上方连接栏后点击「应用」。"
+            hint="向队长获取访问 Token，填入左下角「连接设置」后点击「应用」。"
             action={
-              <button type="button" className="btn btn--sm btn--primary" onClick={() => document.getElementById("cef-access-token")?.focus()}>
+              <button type="button" className="btn btn--sm btn--primary" onClick={openConnectionPanel}>
                 填写访问 Token
               </button>
             }

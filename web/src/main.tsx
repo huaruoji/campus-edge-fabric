@@ -1,8 +1,11 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import "./tokens.css";
+import "./base.css";
+import "./layout.css";
+import "./components.css";
 import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import "./styles.css";
 
 const container = document.getElementById("root");
 if (!container) {

@@ -1,8 +1,18 @@
-import { useState } from "react";
-import type { ApiClient, Worker, WorkerState } from "../api";
+import { useEffect, useId, useMemo, useState } from "react";
+import type { FormEvent } from "react";
+import type { ApiClient, TagStat, Worker, WorkerState } from "../api";
+import {
+  TAG_CATEGORY_LABELS,
+  TAG_CATEGORY_ORDER,
+  tagCategory,
+} from "../api";
 import type { PollState } from "../hooks/usePolling";
+import { usePolling } from "../hooks/usePolling";
 import { formatDuration, formatNumber, formatPct, formatRelativeSeconds } from "../format";
 import { Bar, EmptyBox, ErrorBox, LoadingLine, Section, StateBadge, UpdatedInfo } from "./ui";
+import "../chat.css";
+
+const TAG_FILTER_KEY = "cef.workers.tagFilter";
 
 interface Props {
   workers: PollState<Worker[]>;
@@ -12,14 +22,101 @@ interface Props {
   hideError?: boolean;
 }
 
+interface CategorizedTag {
+  tag: string;
+  category: TagStat["category"];
+}
+
+function readTagFilter(): string[] {
+  try {
+    const raw = window.localStorage.getItem(TAG_FILTER_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveTagFilter(tags: string[]): void {
+  try {
+    window.localStorage.setItem(TAG_FILTER_KEY, JSON.stringify(tags));
+  } catch {
+    // 存储不可用时只在本次会话生效。
+  }
+}
+
+function categorize(tags: string[]): CategorizedTag[] {
+  return tags
+    .map((tag) => ({ tag, category: tagCategory(tag) }))
+    .sort((a, b) => {
+      const order = TAG_CATEGORY_ORDER.indexOf(a.category) - TAG_CATEGORY_ORDER.indexOf(b.category);
+      return order !== 0 ? order : a.tag.localeCompare(b.tag);
+    });
+}
+
+/** GET /api/v1/tags 不可用时，用设备上已注册的标签自己算一份。 */
+function buildTagStats(workers: Worker[], server: TagStat[] | null): TagStat[] {
+  const hasWorkerTags = workers.some((worker) => worker.tags.length > 0);
+  if (server && (server.length > 0 || !hasWorkerTags)) {
+    return [...server].sort((a, b) => {
+      const order = TAG_CATEGORY_ORDER.indexOf(a.category) - TAG_CATEGORY_ORDER.indexOf(b.category);
+      if (order !== 0) return order;
+      if (a.online !== b.online) return b.online - a.online;
+      return a.tag.localeCompare(b.tag);
+    });
+  }
+  const map = new Map<string, TagStat>();
+  for (const worker of workers) {
+    for (const tag of worker.tags) {
+      const entry = map.get(tag) ?? { tag, category: tagCategory(tag), total: 0, online: 0 };
+      entry.total += 1;
+      if (worker.state === "online") entry.online += 1;
+      map.set(tag, entry);
+    }
+  }
+  return [...map.values()].sort((a, b) => {
+    const order = TAG_CATEGORY_ORDER.indexOf(a.category) - TAG_CATEGORY_ORDER.indexOf(b.category);
+    if (order !== 0) return order;
+    if (a.online !== b.online) return b.online - a.online;
+    return a.tag.localeCompare(b.tag);
+  });
+}
+
 export function WorkerPanel({ workers, api, onRefresh, hideError = false }: Props) {
   const stateOrder: Record<WorkerState, number> = { online: 0, draining: 1, offline: 2 };
   const list = [...(workers.data ?? [])].sort((a, b) => stateOrder[a.state] - stateOrder[b.state]);
   const onlineCount = list.filter((worker) => worker.state === "online").length;
+
+  const tagPoll = usePolling((signal) => api.getTags(signal), 15000, api.hasToken, [api]);
+  const [selectedTags, setSelectedTags] = useState<string[]>(readTagFilter);
+
+  useEffect(() => {
+    saveTagFilter(selectedTags);
+  }, [selectedTags]);
+
+  const tagStats = useMemo(() => buildTagStats(list, tagPoll.data), [list, tagPoll.data]);
+  const groupedTags = useMemo(
+    () => TAG_CATEGORY_ORDER
+      .map((category) => ({ category, items: tagStats.filter((item) => item.category === category) }))
+      .filter((group) => group.items.length > 0),
+    [tagStats],
+  );
+  const visible = selectedTags.length === 0
+    ? list
+    : list.filter((worker) => selectedTags.every((tag) => worker.tags.includes(tag)));
+  const visibleOnline = visible.filter((worker) => worker.state === "online").length;
+
+  function toggleTag(tag: string): void {
+    setSelectedTags((previous) =>
+      previous.includes(tag) ? previous.filter((item) => item !== tag) : [...previous, tag]
+    );
+  }
+
   return (
     <Section
       title="设备面板"
-      subtitle={workers.data ? `${onlineCount} 台在线 · ${list.length} 台已登记` : undefined}
+      subtitle={workers.data ? `${onlineCount} 台在线，共 ${list.length} 台已登记` : undefined}
       actions={
         <>
           <UpdatedInfo updatedAt={workers.updatedAt} />
@@ -40,6 +137,46 @@ export function WorkerPanel({ workers, api, onRefresh, hideError = false }: Prop
       {!workers.data && workers.error && hideError ? (
         <EmptyBox title="设备数据暂不可用" hint="请按上方提示检查连接，然后重新检测。" />
       ) : null}
+
+      {groupedTags.length > 0 ? (
+        <div className="tag-filter" role="group" aria-label="按标签筛选设备">
+          <div className="tag-filter-head">
+            <span className="tag-filter-title">标签筛选</span>
+            <span className="field-hint" aria-live="polite">
+              {selectedTags.length > 0
+                ? `已选 ${selectedTags.length} 个标签，匹配 ${visible.length} 台（${visibleOnline} 台在线）`
+                : `共 ${tagStats.length} 个标签，点击可多选`}
+            </span>
+            {selectedTags.length > 0 ? (
+              <button type="button" className="btn btn--sm btn--ghost" onClick={() => setSelectedTags([])}>
+                清除筛选
+              </button>
+            ) : null}
+          </div>
+          {groupedTags.map((group) => (
+            <div className="tag-filter-group" key={group.category}>
+              <span className="tag-filter-cat">{TAG_CATEGORY_LABELS[group.category]}</span>
+              {group.items.map((item) => {
+                const on = selectedTags.includes(item.tag);
+                return (
+                  <button
+                    key={item.tag}
+                    type="button"
+                    className={"tag-chip" + (on ? " tag-chip--on" : "")}
+                    aria-pressed={on}
+                    onClick={() => toggleTag(item.tag)}
+                    title={`在线 ${item.online} 台，共 ${item.total} 台`}
+                  >
+                    {item.tag}
+                    <span className="tag-chip-count">{item.online}/{item.total}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       {workers.data && list.length === 0 ? (
         <EmptyBox
           title="还没有设备加入"
@@ -47,12 +184,24 @@ export function WorkerPanel({ workers, api, onRefresh, hideError = false }: Prop
         />
       ) : null}
 
-      {list.length > 0 ? (
+      {list.length > 0 && visible.length === 0 ? (
+        <EmptyBox
+          title="没有设备带选中的标签"
+          hint="取消部分筛选，或等带该标签的设备上线。"
+          action={
+            <button type="button" className="btn btn--sm btn--ghost" onClick={() => setSelectedTags([])}>
+              清除筛选
+            </button>
+          }
+        />
+      ) : null}
+
+      {visible.length > 0 ? (
         <>
-          {onlineCount === 0 ? <p className="notice notice--warn">当前没有在线设备。启动或重连一台 Worker 后，排队任务就可以继续处理。</p> : null}
+          {visibleOnline === 0 ? <p className="notice notice--warn">当前没有在线设备。启动或重连一台 Worker 后，排队任务就可以继续处理。</p> : null}
           <div className="worker-grid">
-            {list.map((worker) => (
-              <WorkerCard key={worker.worker_id} worker={worker} api={api} onRemoved={onRefresh} />
+            {visible.map((worker) => (
+              <WorkerCard key={worker.worker_id} worker={worker} api={api} onRefresh={onRefresh} />
             ))}
           </div>
         </>
@@ -61,18 +210,63 @@ export function WorkerPanel({ workers, api, onRefresh, hideError = false }: Prop
   );
 }
 
+function WorkerTagList({ tags }: { tags: string[] }) {
+  const sorted = categorize(tags);
+  const shown = sorted.slice(0, 4);
+  const hidden = sorted.slice(4);
+  const groups = TAG_CATEGORY_ORDER
+    .map((category) => ({ category, items: shown.filter((item) => item.category === category) }))
+    .filter((group) => group.items.length > 0);
+  const hiddenGroups = TAG_CATEGORY_ORDER
+    .map((category) => ({ category, items: hidden.filter((item) => item.category === category) }))
+    .filter((group) => group.items.length > 0);
+  return (
+    <div className="worker-tags">
+      {groups.map((group) => (
+        <div className="worker-tag-group" key={group.category}>
+          <span className="worker-tag-cat">{TAG_CATEGORY_LABELS[group.category]}</span>
+          {group.items.map(({ tag }) => (
+            <span key={tag} className="tag">{tag}</span>
+          ))}
+        </div>
+      ))}
+      {hidden.length > 0 ? (
+        <details className="worker-tag-more">
+          <summary aria-label={`还有 ${hidden.length} 个标签`}>{`+${hidden.length}`}</summary>
+          <div className="worker-tag-more-body">
+            {hiddenGroups.map((group) => (
+              <div className="worker-tag-group" key={group.category}>
+                <span className="worker-tag-cat">{TAG_CATEGORY_LABELS[group.category]}</span>
+                {group.items.map(({ tag }) => (
+                  <span key={tag} className="tag">{tag}</span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
 function WorkerCard({
   worker,
   api,
-  onRemoved,
+  onRefresh,
 }: {
   worker: Worker;
   api: ApiClient;
-  onRemoved: () => void;
+  onRefresh: () => void;
 }) {
   const offline = worker.state === "offline";
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState<unknown>(null);
+  const [editingTags, setEditingTags] = useState(false);
+  const [tagDraft, setTagDraft] = useState("");
+  const [tagSaving, setTagSaving] = useState(false);
+  const [tagError, setTagError] = useState<unknown>(null);
+  const [tagNotice, setTagNotice] = useState<string | null>(null);
+  const tagInputId = useId();
 
   async function forget() {
     if (removing || !window.confirm(`移除离线设备「${worker.name}」的记录？`)) return;
@@ -80,13 +274,44 @@ function WorkerCard({
     setRemoving(true);
     try {
       await api.forgetWorker(worker.worker_id);
-      onRemoved();
+      onRefresh();
     } catch (error) {
       setRemoveError(error);
     } finally {
       setRemoving(false);
     }
   }
+
+  function openTagEditor(): void {
+    setTagDraft(worker.tags.join(", "));
+    setTagError(null);
+    setTagNotice(null);
+    setEditingTags(true);
+  }
+
+  async function saveTags(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (tagSaving) return;
+    const raw = tagDraft.split(/[,，\s]+/).map((item) => item.trim()).filter(Boolean);
+    setTagSaving(true);
+    setTagError(null);
+    setTagNotice(null);
+    try {
+      const result = await api.setWorkerTags(worker.worker_id, raw);
+      setTagNotice(
+        result.rejected.length > 0
+          ? "已保存；被服务端拒绝的标签：" + result.rejected.join("、")
+          : "标签已保存：" + (result.tags.length > 0 ? result.tags.join("、") : "（无标签）")
+      );
+      setEditingTags(false);
+      onRefresh();
+    } catch (error) {
+      setTagError(error);
+    } finally {
+      setTagSaving(false);
+    }
+  }
+
   return (
     <article className={"worker-card" + (offline ? " worker-card--offline" : "")}>
       <div className="worker-head">
@@ -95,6 +320,15 @@ function WorkerCard({
           {worker.name}
         </h3>
         <StateBadge state={worker.state} kind="worker" />
+        <button
+          type="button"
+          className="btn btn--sm btn--ghost"
+          onClick={() => (editingTags ? setEditingTags(false) : openTagEditor())}
+          aria-expanded={editingTags}
+          aria-label={`编辑设备 ${worker.name} 的标签`}
+        >
+          {editingTags ? "收起标签" : "编辑标签"}
+        </button>
         {offline ? (
           <button
             type="button"
@@ -108,6 +342,28 @@ function WorkerCard({
         ) : null}
       </div>
       {removeError ? <ErrorBox error={removeError} compact /> : null}
+      {tagError ? <ErrorBox error={tagError} compact /> : null}
+      {tagNotice ? <div className="notice" role="status">{tagNotice}</div> : null}
+
+      {editingTags ? (
+        <form className="worker-tag-editor" onSubmit={(event) => void saveTags(event)}>
+          <label htmlFor={tagInputId} className="field-label">设备标签（逗号分隔）</label>
+          <input
+            id={tagInputId}
+            className="input"
+            value={tagDraft}
+            onChange={(event) => setTagDraft(event.target.value)}
+            placeholder="role:gpu, hw:rtx5060, site:lab"
+            disabled={tagSaving}
+          />
+          <div className="worker-tag-editor-actions">
+            <span className="field-hint">小写字母、数字和 . _ : -，最多 8 个，保存后由服务端规范化</span>
+            <button type="submit" className="btn btn--sm btn--primary" disabled={tagSaving}>
+              {tagSaving ? "保存中…" : "保存标签"}
+            </button>
+          </div>
+        </form>
+      ) : null}
 
       <div className="worker-meta">
         <span>{worker.os ?? "未知系统"}</span>
@@ -117,15 +373,7 @@ function WorkerCard({
         </span>
       </div>
 
-      {worker.tags.length > 0 ? (
-        <div className="worker-tags">
-          {worker.tags.map((tag) => (
-            <span key={tag} className="tag">
-              {tag}
-            </span>
-          ))}
-        </div>
-      ) : null}
+      {worker.tags.length > 0 ? <WorkerTagList tags={worker.tags} /> : null}
 
       <div className="meters">
         <MeterRow label="CPU" value={worker.cpu_pct} tone="cpu" />

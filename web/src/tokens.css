@@ -1,0 +1,80 @@
+/* ============================================================================
+   设计 token —— 唯一允许的颜色来源（docs/design-brief.md §2）
+   除本文件外，任何样式文件不得出现硬编码颜色值。
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* 灰阶 */
+  --gray-25: #FCFCFD;
+  --gray-50: #F7F8FA;
+  --gray-100: #F1F3F6;
+  --gray-200: #E4E7EC;
+  --gray-300: #D0D5DD;
+  --gray-400: #98A2B3;
+  --gray-500: #7C8AA0;
+  --gray-600: #667085;
+  --gray-800: #344054;
+  --gray-900: #101828;
+
+  /* 语义色 */
+  --blue-50: #EFF4FF;
+  --blue-100: #DBE7FF;
+  --blue-600: #2563EB;
+  --blue-700: #1D4ED8;
+  --green-600: #079455;
+  --green-700: #067647;
+  --green-50: #ECFDF3;
+  --amber-600: #DC6803;
+  --amber-700: #B54708;
+  --amber-50: #FFFAEB;
+  --red-600: #D92D20;
+  --red-700: #B42318;
+  --red-50: #FEF3F2;
+
+  /* 表面与文字 */
+  --canvas: var(--gray-50);
+  --surface: #FFFFFF;
+  --surface-subtle: var(--gray-25);
+  --surface-hover: var(--gray-100);
+  --border: var(--gray-200);
+  --border-strong: var(--gray-300);
+  --border-focus: var(--blue-600);
+  --text: var(--gray-900);
+  --text-muted: var(--gray-600);
+  --text-faint: var(--gray-400);
+
+  /* 强调与状态 */
+  --accent: var(--blue-600);
+  --accent-hover: var(--blue-700);
+  --accent-soft: var(--blue-50);
+  --ok: var(--green-700);
+  --ok-soft: var(--green-50);
+  --warn: var(--amber-700);
+  --warn-soft: var(--amber-50);
+  --err: var(--red-700);
+  --err-soft: var(--red-50);
+
+  /* 圆角与阴影 */
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --radius-pill: 999px;
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .08);
+  --shadow-pop: 0 8px 24px rgba(16, 24, 40, .12);
+
+  /* 字体 */
+  --font-sans: "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* 布局常量 */
+  --sidebar-width: 220px;
+  --content-max: 1200px;
+  --page-pad: 32px;
+  --row-height: 44px;
+  --head-height: 36px;
+
+  /* 过渡 */
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --dur: 150ms;
+}

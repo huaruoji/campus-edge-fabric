@@ -1,38 +1,163 @@
+/* F2 拥有的样式：共享对话 / 演示预设 / 任务详情可读化 / 标签。
+   只使用 tokens.css 里的变量，不硬编码颜色。 */
+
+/* ------------------------------ 共享对话与预设 ------------------------------ */
+
 .job-chat {
   display: grid;
-  gap: 14px;
+  gap: 16px;
   min-width: 0;
-  padding: clamp(14px, 3vw, 22px);
-  background: var(--bg-soft);
+  padding: 16px;
+  background: var(--surface-subtle);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-card);
 }
 
-.job-chat-demo {
+.job-chat-head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
-  padding: 14px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
 }
 
-.job-chat-demo h3 {
+.job-chat-head h3 {
   margin: 0;
   font-size: 16px;
+  color: var(--text);
 }
 
-.job-chat-demo p {
+.job-chat-head p {
   margin: 4px 0 0;
-  color: var(--text-dim);
+  max-width: 56ch;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.job-chat-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.job-chat-nickname {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.job-chat-nickname .input {
+  width: 12rem;
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.preset-card {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  height: auto;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 0.12s ease;
+}
+
+.preset-card:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.preset-card:disabled {
+  cursor: not-allowed;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+}
+
+.preset-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.preset-card:disabled .preset-title {
+  color: var(--text-muted);
+}
+
+.preset-meta {
+  display: grid;
+  gap: 4px;
+  margin: 2px 0 0;
+}
+
+.preset-meta > div {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+}
+
+.preset-meta dt {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.preset-meta dd {
+  margin: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.preset-params {
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.preset-reason {
+  font-size: 12px;
+  color: var(--warn);
+  overflow-wrap: anywhere;
+}
+
+.preset-files-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.job-chat-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.job-chat-files,
+.job-chat-tag {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 
 .job-chat-transcript {
   min-width: 0;
-  max-height: 22rem;
+  max-height: 26rem;
+  padding: 2px;
   overflow: auto;
   scrollbar-gutter: stable;
 }
@@ -41,9 +166,9 @@
   display: none;
 }
 
-.job-chat-messages,
-.job-chat-trace ol {
-  display: grid;
+.job-chat-messages {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
   min-width: 0;
   margin: 0;
@@ -52,58 +177,113 @@
 }
 
 .job-chat-message {
+  max-width: min(100%, 46rem);
   min-width: 0;
   padding: 9px 12px;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--panel);
+  border-radius: var(--radius-control);
+  background: var(--surface);
   overflow-wrap: anywhere;
 }
 
-.job-chat-message--user {
-  margin-inline-start: clamp(10px, 5vw, 56px);
-  border-color: rgba(79, 157, 255, 0.35);
-  background: rgba(79, 157, 255, 0.08);
+.job-chat-message--own {
+  margin-inline-start: auto;
+  border-color: var(--blue-100);
+  background: var(--accent-soft);
 }
 
 .job-chat-message--assistant {
-  margin-inline-end: clamp(10px, 5vw, 56px);
+  background: var(--surface-subtle);
 }
 
-.job-chat-role {
-  color: var(--text-dim);
+.job-chat-message--failed {
+  border-color: var(--err);
+  background: var(--err-soft);
+}
+
+.job-chat-message-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.job-chat-author {
+  color: var(--text);
   font-size: 12px;
   font-weight: 600;
 }
 
+.job-chat-author--own {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--blue-700);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.job-chat-time {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.job-chat-state {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.job-chat-state--err {
+  color: var(--err);
+}
+
 .job-chat-message p {
-  margin: 3px 0 0;
+  margin: 4px 0 0;
   white-space: pre-wrap;
-}
-
-.job-chat-form {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.job-chat-form .textarea {
-  min-height: 72px;
-}
-
-.job-chat-composer-actions,
-.job-chat-buttons,
-.job-chat-tool-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
 }
 
 .job-chat-message a {
   display: inline-block;
   margin-top: 6px;
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.job-chat-preview {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+.job-chat-preview-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.job-chat-preview-params {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.job-chat-preview p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .job-chat-trace {
@@ -116,25 +296,32 @@
 
 .job-chat-trace summary {
   padding: 3px 0;
-  color: var(--text-dim);
+  color: var(--text-muted);
+  font-size: 13px;
   cursor: pointer;
 }
 
 .job-chat-trace ol {
-  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
 }
 
 .job-chat-trace li {
   min-width: 0;
   padding: 8px 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
+  background: var(--surface);
 }
 
 .job-chat-trace p,
 .job-chat-trace pre {
   margin: 4px 0 0;
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -142,10 +329,419 @@
   white-space: pre-wrap;
 }
 
+.job-chat-tool-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .job-chat-tool-ok {
   color: var(--ok);
+  font-size: 12px;
 }
 
 .job-chat-tool-error {
   color: var(--err);
+  font-size: 12px;
+}
+
+.job-chat-form {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.job-chat-form-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.job-chat-form .textarea {
+  min-height: 76px;
+}
+
+.job-chat-composer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.job-chat-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* --------------------------- 任务详情：首屏与明细 --------------------------- */
+
+.detail-overview {
+  margin-block-end: 16px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-subtle);
+}
+
+.detail-overview-title {
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.detail-overview-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px 24px;
+  margin: 0;
+}
+
+.detail-overview-list > div {
+  min-width: 0;
+}
+
+.detail-overview-list dt {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.detail-overview-list dd {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.detail-kind {
+  margin-inline-start: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.task-row--open > td {
+  background: var(--surface-subtle);
+}
+
+.task-expand-cell {
+  white-space: nowrap;
+}
+
+.task-detail-row > td {
+  padding: 0;
+  background: var(--surface-subtle);
+}
+
+.task-detail {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.task-summary {
+  margin: 0;
+  color: var(--text);
+}
+
+.task-assets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.task-asset-group h4 {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.asset-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.asset-item {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+.asset-thumb {
+  display: inline-flex;
+  flex: 0 0 64px;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--gray-100);
+  color: var(--text-muted);
+  font-size: 12px;
+  object-fit: cover;
+}
+
+.asset-thumb--loading {
+  animation: asset-pulse 1.2s ease-in-out infinite;
+}
+
+.asset-thumb--error {
+  color: var(--err);
+  border-color: var(--err);
+}
+
+.asset-body {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  min-width: 0;
+}
+
+.asset-name {
+  color: var(--text);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.asset-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.asset-empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.json-summary {
+  max-width: 100%;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.json-summary--muted,
+.json-summary--err {
+  font-size: 12px;
+}
+
+.json-summary--err {
+  color: var(--err);
+}
+
+.json-summary-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+
+.json-summary-list > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 8px;
+}
+
+.json-summary-list dt {
+  color: var(--text-muted);
+}
+
+.json-summary-list dd {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.json-summary-note {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+}
+
+@keyframes asset-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asset-thumb--loading {
+    animation: none;
+  }
+}
+
+/* --------------------------------- 标签 --------------------------------- */
+
+.tag-filter {
+  display: grid;
+  gap: 8px;
+  margin-block-end: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.tag-filter-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.tag-filter-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tag-filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.tag-filter-cat {
+  min-width: 32px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.tag-chip {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tag-chip:hover {
+  background: var(--surface-hover);
+}
+
+.tag-chip--on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--blue-700);
+}
+
+.tag-chip-count {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tag-chip--on .tag-chip-count {
+  color: var(--blue-700);
+}
+
+/* .worker-tags 容器由 components.css 提供（F1 拥有）；这里只加分组内部样式。 */
+.worker-tag-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.worker-tag-cat {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.worker-tag-more {
+  position: relative;
+}
+
+.worker-tag-more > summary {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.worker-tag-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.worker-tag-more-body {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 10;
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+}
+
+.worker-tag-editor {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-subtle);
+}
+
+.worker-tag-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* -------------------------------- 焦点可见 -------------------------------- */
+
+.preset-card:focus-visible,
+.tag-chip:focus-visible,
+.job-chat-author--own:focus-visible,
+.worker-tag-more > summary:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preset-card {
+    transition: none;
+  }
 }

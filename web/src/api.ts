@@ -73,6 +73,15 @@ export interface PerWorkerStat {
   share?: number;
 }
 
+/** 一个输入/输出文件的引用（GET /api/v1/jobs/{id} 的 tasks[].inputs|outputs）。 */
+export interface BlobBrief {
+  sha256: string;
+  name: string;
+  size: number;
+  /** 可直接用同一 token 拉取的相对路径，通常是 /api/v1/blobs/{sha256}。 */
+  url: string;
+}
+
 export interface JobTask {
   task_id: string;
   idx: number;
@@ -82,10 +91,27 @@ export interface JobTask {
   attempt?: number;
   duration_s: number | null;
   error?: string;
+  started_at?: number | null;
+  finished_at?: number | null;
+  output_sha256?: string;
+  /** 该子任务的输入文件（展开行时用）。 */
+  inputs: BlobBrief[];
+  /** 该子任务的产物（展开行时用）。 */
+  outputs: BlobBrief[];
+  /** 后端给出的一句话结果摘要。 */
+  summary?: string;
 }
 
 /** GET /api/v1/jobs/{job_id} 的完整响应。 */
 export interface JobDetail extends JobSummary {
+  /** 人类可读的参数描述，例如「长边 512px，WebP，质量 80」。 */
+  params_text: string;
+  /** 输入文件摘要，例如「16 张图片，共 3.2 MB」。 */
+  input_summary: string;
+  /** 提交者昵称。 */
+  submitter: string | null;
+  /** 提交时指定的设备标签（若有）。 */
+  required_tag?: string | null;
   per_worker: PerWorkerStat[];
   tasks: JobTask[];
 }
@@ -154,6 +180,29 @@ export interface ChatMessage {
 export interface AgentChatRequest {
   messages: ChatMessage[];
   context: { files: { name: string; size: number }[] };
+  /** 发送者昵称（可空），服务端落库时作为消息作者。 */
+  author?: string;
+  /** 共享对话房间，默认 pool。 */
+  room?: string;
+}
+
+/** 服务端落库的一条共享对话消息（GET /api/v1/chat/messages）。 */
+export interface ServerChatMessage {
+  id: string;
+  room: string;
+  role: "user" | "assistant";
+  author: string;
+  content: string;
+  trace: AgentToolTrace[] | null;
+  preview: AgentPreview | null;
+  job_id: string | null;
+  created_at: number;
+}
+
+/** GET /api/v1/chat/messages 的响应。latest 是最新一条的 created_at（无消息为 0）。 */
+export interface ChatPage {
+  messages: ServerChatMessage[];
+  latest: number;
 }
 
 export interface AgentPreview {
@@ -176,6 +225,49 @@ export interface AgentChatResponse {
   tool_trace: AgentToolTrace[];
   model?: string;
   usage: Record<string, unknown> | null;
+  /** 服务端落库后这条用户消息的 id（用于把乐观气泡替换成真实消息）。 */
+  user_message_id?: string;
+  /** 服务端落库后这条助手回复的 id。 */
+  assistant_message_id?: string;
+}
+
+/** 标签分类，与后端 cef_protocol.tags.categorize 一致。 */
+export type TagCategory = "role" | "hw" | "site" | "bench" | "free";
+
+export const TAG_CATEGORY_ORDER: readonly TagCategory[] = ["role", "hw", "site", "bench", "free"];
+
+export const TAG_CATEGORY_LABELS: Record<TagCategory, string> = {
+  role: "角色",
+  hw: "硬件",
+  site: "场地",
+  bench: "基准",
+  free: "其他",
+};
+
+/** 依据前缀判断标签分类（GET /api/v1/tags 不可用时的本地兜底）。 */
+export function tagCategory(tag: string): TagCategory {
+  if (tag.startsWith("bench-")) return "bench";
+  if (tag.startsWith("role:")) return "role";
+  if (tag.startsWith("hw:")) return "hw";
+  if (tag.startsWith("site:")) return "site";
+  return "free";
+}
+
+/** GET /api/v1/tags 的一项。 */
+export interface TagStat {
+  tag: string;
+  category: TagCategory;
+  /** 注册了该标签的设备总数（含离线）。 */
+  total: number;
+  /** 注册了该标签且当前在线的设备数。 */
+  online: number;
+}
+
+export interface WorkerTagUpdate {
+  /** 规范化后实际保存在设备上的标签（升序）。 */
+  tags: string[];
+  /** 被服务端拒绝的标签（格式非法或超过 8 个上限）。 */
+  rejected: string[];
 }
 
 export interface DownloadPayload {
@@ -186,6 +278,13 @@ export interface DownloadPayload {
 export interface ListJobsOptions {
   limit?: number;
   state?: JobState;
+}
+
+export interface ChatMessagesOptions {
+  room?: string;
+  /** created_at 浮点游标，只取严格更新的消息；不传则取最近 limit 条。 */
+  after?: number | null;
+  limit?: number;
 }
 
 /* --------------------------------- 错误处理 -------------------------------- */
@@ -244,12 +343,12 @@ export function toUserMessage(error: unknown): UserMessage {
       case "network":
         return {
           title: "无法连接 Coordinator",
-          detail: "请检查网络和顶部的服务地址，确认 Coordinator 已启动后重试。",
+          detail: "请检查网络和左下角的连接设置，确认 Coordinator 已启动后重试。",
         };
       case "unauthorized":
         return {
           title: "认证失败：Token 无效或缺失",
-          detail: "请在顶部填写有效的 Token，然后点击「应用」。",
+          detail: "请在左下角连接设置里填写有效的 Token，然后点击「应用」。",
         };
       case "not_found":
         if (error.code === "not_found") {
@@ -260,7 +359,7 @@ export function toUserMessage(error: unknown): UserMessage {
         }
         return {
           title: "接口不存在（404）",
-          detail: "请检查顶部的服务地址，或联系管理员确认 Coordinator 版本。",
+          detail: "请检查左下角的服务地址，或联系管理员确认 Coordinator 版本。",
         };
       case "conflict":
         return { title: "状态冲突（409）", detail: error.message };
@@ -388,9 +487,25 @@ function normalizePerWorker(raw: unknown, index: number): PerWorkerStat | null {
   };
 }
 
+function normalizeBlobBrief(raw: unknown): BlobBrief | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+  const sha256 = asString(r.sha256);
+  if (!sha256) return null;
+  return {
+    sha256,
+    name: asString(r.name) ?? sha256.slice(0, 12),
+    size: asNumber(r.size) ?? 0,
+    // 老版本后端可能不给 url，用 blob 路径兜底。
+    url: asString(r.url) ?? "/api/v1/blobs/" + encodeURIComponent(sha256),
+  };
+}
+
 function normalizeTask(raw: unknown, index: number): JobTask | null {
   const r = asRecord(raw);
   if (!r) return null;
+  const inputsRaw = Array.isArray(r.inputs) ? r.inputs : [];
+  const outputsRaw = Array.isArray(r.outputs) ? r.outputs : [];
   return {
     task_id: asString(r.task_id) ?? "task-" + index,
     idx: asNumber(r.idx) ?? index,
@@ -400,6 +515,12 @@ function normalizeTask(raw: unknown, index: number): JobTask | null {
     attempt: asNumber(r.attempt),
     duration_s: asNumberOrNull(r.duration_s),
     error: asString(r.error),
+    started_at: asNumberOrNull(r.started_at),
+    finished_at: asNumberOrNull(r.finished_at),
+    output_sha256: asString(r.output_sha256),
+    inputs: inputsRaw.map(normalizeBlobBrief).filter(isNotNull),
+    outputs: outputsRaw.map(normalizeBlobBrief).filter(isNotNull),
+    summary: asString(r.summary),
   };
 }
 
@@ -413,6 +534,10 @@ function normalizeJobDetail(raw: unknown): JobDetail {
   const tasksRaw = Array.isArray(r.tasks) ? r.tasks : [];
   return {
     ...summary,
+    params_text: asString(r.params_text) ?? "",
+    input_summary: asString(r.input_summary) ?? "",
+    submitter: asString(r.submitter) ?? null,
+    required_tag: asString(r.required_tag) ?? null,
     per_worker: perWorkerRaw.map(normalizePerWorker).filter(isNotNull),
     tasks: tasksRaw.map(normalizeTask).filter(isNotNull),
   };
@@ -509,23 +634,94 @@ function normalizeAgentChat(raw: unknown): AgentChatResponse {
     };
   }
 
-  const trace = Array.isArray(response.tool_trace) ? response.tool_trace : [];
   return {
     reply,
     preview,
-    tool_trace: trace.map((entry): AgentToolTrace | null => {
-      const data = asRecord(entry);
-      const name = asString(data?.name);
-      if (!data || !name) return null;
-      return {
-        name,
-        args: asRecord(data.args) ?? {},
-        ok: data.ok === true,
-        summary: asString(data.summary) ?? "",
-      };
-    }).filter(isNotNull),
+    tool_trace: normalizeToolTraceList(response.tool_trace),
     model: asString(response.model),
     usage: asRecord(response.usage),
+    user_message_id: asString(response.user_message_id),
+    assistant_message_id: asString(response.assistant_message_id),
+  };
+}
+
+function normalizeToolTrace(raw: unknown): AgentToolTrace | null {
+  const data = asRecord(raw);
+  const name = asString(data?.name);
+  if (!data || !name) return null;
+  return {
+    name,
+    args: asRecord(data.args) ?? {},
+    ok: data.ok === true,
+    summary: asString(data.summary) ?? "",
+  };
+}
+
+function normalizeToolTraceList(raw: unknown): AgentToolTrace[] {
+  const list = Array.isArray(raw) ? raw : [];
+  return list.map(normalizeToolTrace).filter(isNotNull);
+}
+
+/** 宽松解析预览：对话历史里坏掉的预览不应该让整条消息消失。 */
+function normalizePreview(raw: unknown): AgentPreview | null {
+  const data = asRecord(raw);
+  if (!data) return null;
+  const workload = asString(data.workload);
+  const params = asRecord(data.params);
+  if (!workload || !params) return null;
+  const count = asNumberOrNull(data.task_count);
+  return {
+    workload,
+    params,
+    task_count: count !== null && Number.isInteger(count) && count >= 0 ? count : null,
+    note: asString(data.note) ?? "",
+  };
+}
+
+/** GET /api/v1/chat/messages 的单条消息；缺 id/内容时丢弃。 */
+function normalizeServerChatMessage(raw: unknown): ServerChatMessage | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+  const id = asString(r.id);
+  const content = asString(r.content);
+  const role = r.role === "user" || r.role === "assistant" ? r.role : null;
+  if (!id || content === undefined || !role) return null;
+  return {
+    id,
+    room: asString(r.room) ?? "pool",
+    role,
+    author: asString(r.author) ?? "",
+    content,
+    trace: Array.isArray(r.trace) ? normalizeToolTraceList(r.trace) : null,
+    preview: normalizePreview(r.preview),
+    job_id: asString(r.job_id) ?? null,
+    created_at: asNumber(r.created_at) ?? 0,
+  };
+}
+
+function normalizeChatPage(raw: unknown): ChatPage {
+  const r = asRecord(raw);
+  if (!r) throw new CefApiError("parse", "对话接口返回的不是 JSON 对象。");
+  const list = Array.isArray(r.messages) ? r.messages : [];
+  const messages = list.map(normalizeServerChatMessage).filter(isNotNull);
+  const latest = asNumber(r.latest) ?? messages.reduce((max, item) => Math.max(max, item.created_at), 0);
+  return { messages, latest };
+}
+
+function normalizeTagStat(raw: unknown): TagStat | null {
+  const r = asRecord(raw);
+  if (!r) return null;
+  const tag = asString(r.tag);
+  if (!tag) return null;
+  const category = r.category === "role" || r.category === "hw" || r.category === "site"
+    || r.category === "bench" || r.category === "free"
+    ? r.category
+    : tagCategory(tag);
+  return {
+    tag,
+    category,
+    total: asNumber(r.total) ?? 0,
+    online: asNumber(r.online) ?? 0,
   };
 }
 
@@ -571,6 +767,11 @@ export interface ApiClient {
   getWorkloads(signal?: AbortSignal): Promise<Workload[]>;
   listJobs(options?: ListJobsOptions, signal?: AbortSignal): Promise<JobSummary[]>;
   getJob(jobId: string, signal?: AbortSignal): Promise<JobDetail>;
+  getChatMessages(options?: ChatMessagesOptions, signal?: AbortSignal): Promise<ChatPage>;
+  getTags(signal?: AbortSignal): Promise<TagStat[]>;
+  setWorkerTags(workerId: string, tags: string[]): Promise<WorkerTagUpdate>;
+  /** 带 Authorization 拉取 blob（<img> 带不了请求头，需要先取成 Blob/objectURL）。 */
+  fetchBlob(pathOrUrl: string, signal?: AbortSignal): Promise<Blob>;
   chat(request: AgentChatRequest, signal?: AbortSignal): Promise<AgentChatResponse>;
   submitJob(spec: JobSpec, files: File[]): Promise<SubmitResponse>;
   cancelJob(jobId: string): Promise<void>;
@@ -693,6 +894,57 @@ export function createApiClient(baseUrlRaw: string, tokenRaw: string): ApiClient
     async getJob(jobId: string, signal?: AbortSignal): Promise<JobDetail> {
       const raw = await requestJson("/jobs/" + encodeURIComponent(jobId), { method: "GET" }, signal);
       return normalizeJobDetail(raw);
+    },
+
+    async getChatMessages(options: ChatMessagesOptions = {}, signal?: AbortSignal): Promise<ChatPage> {
+      const qs = new URLSearchParams();
+      qs.set("room", options.room ?? "pool");
+      if (typeof options.after === "number" && Number.isFinite(options.after) && options.after > 0) {
+        qs.set("after", String(options.after));
+      }
+      qs.set("limit", String(options.limit ?? 200));
+      const raw = await requestJson("/chat/messages?" + qs.toString(), { method: "GET" }, signal);
+      return normalizeChatPage(raw);
+    },
+
+    async getTags(signal?: AbortSignal): Promise<TagStat[]> {
+      const raw = await requestJson("/tags", { method: "GET" }, signal);
+      const r = asRecord(raw);
+      const list = r && Array.isArray(r.tags) ? r.tags : [];
+      return list.map(normalizeTagStat).filter(isNotNull);
+    },
+
+    async setWorkerTags(workerId: string, tags: string[]): Promise<WorkerTagUpdate> {
+      const raw = await requestJson("/workers/" + encodeURIComponent(workerId), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags }),
+      });
+      const r = asRecord(raw) ?? {};
+      const saved = asStringArray(r.tags);
+      return {
+        tags: saved.length > 0 ? saved : tags,
+        // 后端字段名是 rejected_tags；兼容旧写法 rejected。
+        rejected: asStringArray(r.rejected_tags ?? r.rejected),
+      };
+    },
+
+    async fetchBlob(pathOrUrl: string, signal?: AbortSignal): Promise<Blob> {
+      const url = /^https?:\/\//i.test(pathOrUrl)
+        ? pathOrUrl
+        : baseUrl + (pathOrUrl.startsWith("/") ? pathOrUrl : "/" + pathOrUrl);
+      let res: Response;
+      try {
+        res = await fetch(url, { method: "GET", headers: authHeaders(), signal });
+      } catch (error) {
+        if (isAbortError(error)) throw new CefApiError("aborted", "请求已取消。");
+        throw new CefApiError("network", "无法访问 " + (baseUrl || "（未配置地址）") + "。");
+      }
+      if (!res.ok) {
+        const body = await parseBody(res);
+        throw httpError(res.status, body);
+      }
+      return res.blob();
     },
 
     async chat(request: AgentChatRequest, signal?: AbortSignal): Promise<AgentChatResponse> {

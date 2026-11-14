@@ -6,7 +6,9 @@ Keep it dependency-light: httpx only, no async.
 
 from __future__ import annotations
 
+import getpass
 import json
+import os
 import time
 from collections.abc import Iterator, Sequence
 from pathlib import Path
@@ -25,6 +27,14 @@ from .models import (
 )
 
 API = "/api/v1"
+
+
+def _default_submitter() -> str | None:
+    """Who to blame for this job; the dashboard shows it next to the task name."""
+    try:
+        return getpass.getuser()
+    except Exception:  # noqa: BLE001 - no password db on some systems
+        return None
 
 
 class CefError(RuntimeError):
@@ -117,6 +127,7 @@ class CefClient:
             "workload": workload,
             "params": params or {},
             "name": name,
+            "submitter": os.environ.get("CEF_SUBMITTER") or _default_submitter(),
             "priority": priority,
             "required_tag": required_tag,
             "inputs": [{"name": p.name} for p in paths],

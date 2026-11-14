@@ -24,7 +24,7 @@ export class ErrorBoundary extends Component<Props, State> {
   render(): ReactNode {
     if (this.state.error) {
       return (
-        <div className="crash">
+        <div className="crash" role="alert">
           <h1>仪表盘渲染出错</h1>
           <p>页面遇到了未预期的错误，但后端与数据不受影响。刷新页面即可重试。</p>
           <pre>{this.state.error.message}</pre>

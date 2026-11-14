@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { JobState, JobSummary } from "../api";
 import type { PollState } from "../hooks/usePolling";
 import { formatNumber, formatUnix, jobProgress, JOB_STATE_LABELS } from "../format";
-import { EmptyBox, ErrorBox, LoadingLine, Section, StateBadge, UpdatedInfo } from "./ui";
+import { CopyId, EmptyBox, ErrorBox, LoadingLine, Section, StateBadge, UpdatedInfo } from "./ui";
 
 interface Props {
   jobs: PollState<JobSummary[]>;
@@ -30,8 +30,6 @@ export function JobList({ jobs, onRefresh, hideError = false }: Props) {
 
   return (
     <Section
-      title="任务列表"
-      subtitle={jobs.data ? `显示最近 ${all.length} 个作业` : undefined}
       actions={
         <>
           <UpdatedInfo updatedAt={jobs.updatedAt} />
@@ -39,7 +37,7 @@ export function JobList({ jobs, onRefresh, hideError = false }: Props) {
             className="select select--sm"
             value={filter}
             onChange={(event) => setFilter(event.target.value as JobState | "all")}
-            aria-label="按状态筛选"
+            aria-label="按状态筛选任务"
           >
             {FILTER_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -80,7 +78,7 @@ export function JobList({ jobs, onRefresh, hideError = false }: Props) {
 
       {list.length > 0 ? (
         <div className="table-wrap" role="region" aria-label="任务列表" tabIndex={0}>
-          <table className="data-table">
+          <table className="data-table job-table">
             <thead>
               <tr>
                 <th>任务</th>
@@ -101,7 +99,9 @@ export function JobList({ jobs, onRefresh, hideError = false }: Props) {
                       <a className="cell-title job-link" href={"#/jobs/" + encodeURIComponent(job.job_id)}>
                         {job.name || "未命名任务"}
                       </a>
-                      <div className="cell-sub mono">{job.job_id}</div>
+                      <div className="cell-sub">
+                        <CopyId value={job.job_id} />
+                      </div>
                     </td>
                     <td>{job.workload ?? "—"}</td>
                     <td>

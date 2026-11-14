@@ -1,0 +1,291 @@
+/* ============================================================================
+   布局层：侧栏 + 内容区骨架、页头、页脚、响应式断点（<960 / <640）
+   断点内不改变信息结构，只把侧栏折叠为顶部横向 tab。
+   ========================================================================== */
+
+.app-shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  /* 防止 auto 行在短页面被 stretch，把侧栏和内容之间撑出一段空白 */
+  align-content: start;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--canvas);
+}
+
+/* --------------------------------- 侧栏 --------------------------------- */
+
+.app-sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100vh;
+  height: 100dvh;
+  padding: 16px 12px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 4px 8px 4px;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-control);
+  background: var(--gray-900);
+  color: var(--surface);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  line-height: 1;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.brand-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brand-version {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  line-height: 1.3;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: var(--radius-control);
+  color: var(--text-muted);
+  font-size: 14px;
+  text-decoration: none;
+  transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+.nav-link:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.nav-link[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  font-weight: 600;
+}
+
+.nav-count {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--gray-100);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  line-height: 20px;
+}
+
+.nav-link[aria-current="page"] .nav-count {
+  background: var(--surface);
+  color: var(--accent-hover);
+}
+
+/* 侧栏底部：连接状态（ConnectionBar 内部还有展开面板） */
+.sidebar-foot {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+  margin-top: auto;
+  min-width: 0;
+}
+
+/* -------------------------------- 内容区 -------------------------------- */
+
+.app-main {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--content-max);
+  min-width: 0;
+  margin: 0 auto;
+  padding: 24px var(--page-pad) 48px;
+}
+
+.app-main:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -3px;
+  border-radius: var(--radius-card);
+}
+
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.page-head-text {
+  min-width: 0;
+}
+
+.page-title {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.page-desc {
+  margin-top: 4px;
+  max-width: 68ch;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* --------------------------------- 页脚 --------------------------------- */
+
+.app-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 40px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+/* ------------------------------- 响应式 -------------------------------- */
+
+/* <960px：侧栏折叠为顶部横向 tab，连接状态留在同一行右侧 */
+@media (max-width: 959px) {
+  .app-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-sidebar {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    height: auto;
+    padding: 8px 16px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    overflow: visible;
+  }
+
+  .sidebar-brand {
+    padding: 0;
+  }
+
+  .sidebar-nav {
+    order: 3;
+    flex-basis: 100%;
+    flex-direction: row;
+    gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+
+  .sidebar-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-link {
+    height: 32px;
+    padding: 0 10px;
+    white-space: nowrap;
+  }
+
+  .sidebar-foot {
+    flex-direction: column;
+    margin-top: 0;
+    margin-left: auto;
+  }
+
+  .app-sidebar--conn-open .sidebar-foot {
+    order: 4;
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
+  .app-main {
+    padding-top: 20px;
+  }
+}
+
+@media (max-width: 639px) {
+  :root {
+    --page-pad: 16px;
+  }
+
+  .app-sidebar {
+    padding: 8px 16px;
+  }
+
+  .app-main {
+    padding-top: 16px;
+    padding-bottom: 32px;
+  }
+
+  .page-head {
+    padding-bottom: 16px;
+  }
+
+  .page-title {
+    font-size: 18px;
+  }
+
+  .brand-name {
+    font-size: 12px;
+  }
+}

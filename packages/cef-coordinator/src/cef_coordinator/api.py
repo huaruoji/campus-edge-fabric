@@ -192,6 +192,10 @@ async def create_job(
 
     job_id = new_id("job")
     now = time.time()
+    # A job without a name is indistinguishable from any other ID on the dashboard.
+    display_name = (job_spec.name or "").strip() or time.strftime(
+        f"{job_spec.workload}-%m%d-%H%M", time.localtime(now)
+    )
     with db.transaction(s.db_path) as conn:
         _blob_rows(conn, stored)
         conn.execute(
@@ -199,7 +203,7 @@ async def create_job(
                VALUES (?,?,?,?,?,?,?,?,?)""",
             (
                 job_id,
-                job_spec.name,
+                display_name,
                 job_spec.workload,
                 json.dumps(params, ensure_ascii=False),
                 str(JobState.QUEUED),
@@ -1059,3 +1063,14 @@ def patch_worker(request: Request, worker_id: str, patch: WorkerPatch) -> Worker
         conn.execute("UPDATE workers SET tags=? WHERE id=?", (json.dumps(tags), worker_id))
         scheduler._event(conn, "worker_tags_updated", worker_id=worker_id, message=",".join(tags))
     return WorkerPatchResponse(worker_id=worker_id, tags=tags, rejected_tags=rejected)
+
+
+@router.delete("/chat/messages/{message_id}", status_code=204)
+def chat_delete_message(request: Request, message_id: str) -> Response:
+    """Remove one line from the shared transcript (test noise, wrong info)."""
+    s = settings_of(request)
+    with db.transaction(s.db_path) as conn:
+        removed = conn.execute("DELETE FROM chat_messages WHERE id=?", (message_id,)).rowcount
+    if not removed:
+        raise _err(404, "not_found", f"message {message_id} not found")
+    return Response(status_code=204)

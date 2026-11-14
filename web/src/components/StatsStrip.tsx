@@ -18,50 +18,58 @@ export function StatsStrip({ stats, health, onRefresh, hideError = false }: Prop
 
   return (
     <section className="stats-strip" aria-label="集群统计">
-      <div className="stats-cards">
-        <div className="stat-card">
-          <div className="stat-label">任务吞吐</div>
-          <div className="stat-value">
-            {formatNumber(data?.tasks_per_min, 2)}
-            <span className="stat-unit">tasks/min</span>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">单任务耗时 p50</div>
-          <div className="stat-value">{formatDuration(data?.p50_duration_s)}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">在线设备</div>
-          <div className="stat-value">
-            {online === null ? "—" : formatNumber(online)}
-            <span className="stat-unit">台</span>
-          </div>
-        </div>
-        <div className="stat-card stat-card--wide">
-          <div className="stat-label">任务总览</div>
-          <div className="stat-chips">
-            <span className="stat-chip">
-              作业总数 <b>{formatNumber(jobs.total)}</b>
-            </span>
-            <span className="stat-chip stat-chip--info">
-              进行中作业 <b>{formatNumber(jobs.running)}</b>
-            </span>
-            <span className="stat-chip stat-chip--info">
-              排队任务 <b>{formatNumber(jobs.queued)}</b>
-            </span>
-            <span className="stat-chip stat-chip--ok">
-              成功任务 <b>{formatNumber(jobs.succeeded)}</b>
-            </span>
-            <span className="stat-chip stat-chip--err">
-              失败任务 <b>{formatNumber(jobs.failed)}</b>
+      <div className="stats">
+        <div className="stats-kpis">
+          <div className="stat">
+            <span className="stat-label">任务吞吐</span>
+            <span className="stat-value">
+              {formatNumber(data?.tasks_per_min, 2)}
+              <span className="stat-unit">tasks/min</span>
             </span>
           </div>
+          <div className="stat">
+            <span className="stat-label">单任务耗时 p50</span>
+            <span className="stat-value">{formatDuration(data?.p50_duration_s)}</span>
+          </div>
+          <div className="stat">
+            <span className="stat-label">在线设备</span>
+            <span className="stat-value">
+              {online === null ? "—" : formatNumber(online)}
+              <span className="stat-unit">台</span>
+            </span>
+          </div>
+        </div>
+
+        <div className="stats-overview">
+          <h3 className="overview-title">作业与任务</h3>
+          <dl className="overview-grid">
+            <div>
+              <dt>作业总数</dt>
+              <dd>{formatNumber(jobs.total)}</dd>
+            </div>
+            <div>
+              <dt>进行中作业</dt>
+              <dd>{formatNumber(jobs.running)}</dd>
+            </div>
+            <div>
+              <dt>排队任务</dt>
+              <dd>{formatNumber(jobs.queued)}</dd>
+            </div>
+            <div>
+              <dt>成功任务</dt>
+              <dd>{formatNumber(jobs.succeeded)}</dd>
+            </div>
+            <div>
+              <dt>失败任务</dt>
+              <dd className={jobs.failed ? "text-err" : undefined}>{formatNumber(jobs.failed)}</dd>
+            </div>
+          </dl>
         </div>
       </div>
 
       {data?.bottleneck ? (
         <div className="bottleneck" role="status">
-          <span className="bottleneck-label">瓶颈提示</span>
+          <span className="bottleneck-label">瓶颈</span>
           <span>{data.bottleneck}</span>
         </div>
       ) : null}
@@ -71,7 +79,7 @@ export function StatsStrip({ stats, health, onRefresh, hideError = false }: Prop
       <div className="strip-foot">
         <UpdatedInfo updatedAt={stats.updatedAt} />
         {health.data?.version ? <span className="strip-meta">版本 {health.data.version}</span> : null}
-        {health.data?.uptime_s ? <span className="strip-meta">运行 {formatDuration(health.data.uptime_s)}</span> : null}
+        {health.data?.uptime_s ? <span className="strip-meta">已运行 {formatDuration(health.data.uptime_s)}</span> : null}
       </div>
     </section>
   );

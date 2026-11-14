@@ -43,6 +43,8 @@ stats: tasks/min 6.0  p50 0.041s  retries 0
 | 开发机 | `./deploy/install.sh --role all` | 全部 + 所有 workload 依赖 | 随意 |
 
 **Worker 机器同时带 CLI**——队友的笔记本既是算力，也是提交端，不需要装两遍。
+
+**NVIDIA 独显推理**：使用[GPU Worker 安装与启停指南](docs/gpu-worker.md)的独立环境和脚本。已完成 [RTX 5060 线上 24 个推理任务验收](docs/gpu-validation-2026-11-14.md)，包含 CUDA 算子证据与 CPU 参考结果对照。
 （远端的 VPS 上 coordinator 用的是 `.venv/bin/cef-coord` 直接启动，见 `deploy/vps/INSTANCE.md`。）
 
 **关于 agent 接入**：MCP 是这个领域的现行标准（Claude Code / Codex / Cursor 都支持），但它是**可选的第二入口**——

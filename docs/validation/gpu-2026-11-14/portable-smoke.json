@@ -1,0 +1,14 @@
+{
+  "verified_images": 4,
+  "kernel_provider_counts": {
+    "CUDAExecutionProvider": 1208,
+    "CPUExecutionProvider": 148
+  },
+  "profile_model_runs": 4,
+  "gpu_compute_pid_observed": true,
+  "powershell_check": true,
+  "powershell_start": true,
+  "duplicate_start_guard": true,
+  "graceful_stop": true,
+  "scope": "Portable repository scripts; loopback coordinator; real local RTX 5060 GPU; not another physical device"
+}

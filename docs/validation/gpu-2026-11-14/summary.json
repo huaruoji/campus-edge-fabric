@@ -1,0 +1,289 @@
+{
+  "job_id": "job_01M7CK6EQX8CJ1RW98K4KFK8VP",
+  "verified_images": 24,
+  "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+  "worker_pid": 31560,
+  "per_worker": [
+    {
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "name": "liusic-rtx5060",
+      "completed": 24,
+      "failed": 0,
+      "mean_duration_s": 0.198,
+      "total_duration_s": 4.744,
+      "share": 1.0
+    }
+  ],
+  "kernel_provider_counts": {
+    "CUDAExecutionProvider": 7248,
+    "CPUExecutionProvider": 888
+  },
+  "cuda_op_counts": {
+    "Conv": 2112,
+    "QuickGelu": 1848,
+    "Split": 240,
+    "Add": 528,
+    "Concat": 624,
+    "MaxPool": 72,
+    "Shape": 264,
+    "Reshape": 480,
+    "FusedMatMul": 48,
+    "Softmax": 48,
+    "Resize": 48,
+    "Transpose": 96,
+    "Slice": 48,
+    "Range": 144,
+    "Cast": 144,
+    "Expand": 144,
+    "Unsqueeze": 168,
+    "Sub": 48,
+    "Div": 24,
+    "ConstantOfShape": 72,
+    "Mul": 24,
+    "Sigmoid": 24
+  },
+  "profile_model_runs": 24,
+  "gpu_compute_pid_observed": true,
+  "checks": [
+    {
+      "idx": 0,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 1,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 2,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 3,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 4,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 5,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 6,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 7,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 8,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 9,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 10,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 11,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 12,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 13,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 14,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 15,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 16,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 17,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 18,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 19,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 20,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 21,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 22,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    },
+    {
+      "idx": 23,
+      "worker_id": "w_01M7CG4DBV3EC811G3YY9CQ6V4",
+      "provider": "CUDAExecutionProvider",
+      "detections": 5,
+      "sha256_ok": true,
+      "cpu_reference_match": true
+    }
+  ],
+  "model_sha256": "b1a053916c9d667d05a53bfb43764a0aabb11dee20795af75b8ce408760685d3",
+  "input_bytes": 5438126,
+  "scope": "24 public bus-image variants; functional GPU validation, not throughput benchmark",
+  "runtime": {
+    "ort_version": "1.23.2",
+    "providers": [
+      "CUDAExecutionProvider",
+      "CPUExecutionProvider"
+    ],
+    "provider_options": {
+      "CUDAExecutionProvider": {
+        "device_id": "0",
+        "has_user_compute_stream": "0",
+        "cudnn_conv1d_pad_to_nc1d": "0",
+        "user_compute_stream": "0",
+        "gpu_external_alloc": "0",
+        "gpu_mem_limit": "18446744073709551615",
+        "enable_cuda_graph": "0",
+        "gpu_external_free": "0",
+        "gpu_external_empty_cache": "0",
+        "arena_extend_strategy": "kNextPowerOfTwo",
+        "cudnn_conv_algo_search": "HEURISTIC",
+        "do_copy_in_default_stream": "1",
+        "cudnn_conv_use_max_workspace": "1",
+        "tunable_op_enable": "0",
+        "tunable_op_tuning_enable": "0",
+        "tunable_op_max_tuning_duration_ms": "0",
+        "enable_skip_layer_norm_strict_mode": "0",
+        "prefer_nhwc": "0",
+        "use_ep_level_unified_stream": "0",
+        "use_tf32": "0",
+        "sdpa_kernel": "0",
+        "fuse_conv_bias": "0"
+      },
+      "CPUExecutionProvider": {}
+    }
+  },
+  "hardware": {
+    "name": "NVIDIA GeForce RTX 5060 Laptop GPU",
+    "memory_mib": 8151,
+    "driver": "596.13"
+  },
+  "raw_evidence_sha256": {
+    "verification.json": "ea2bcd4df007e7f97845bfbf4fdda5edc368d996b364f8dbf3c3abab5f96f40a",
+    "gpu-samples.json": "c91ed06b26914e411d5b2c9a7c45475330f21a2851edb83e19823253db7ff4d7",
+    "result.zip": "dd8a77dcb2f596942dc3b2225db64e27119a9d8e81c357acd6ba08c70452b1fc",
+    "worker-ort_2026-11-14_16-35-46.json": "1e12fc4f5487adc61f383f1673d8a495311bded00aa23cf8f405e54862019999"
+  }
+}

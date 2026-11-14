@@ -1,0 +1,6 @@
+# Keep this separate from the CPU onnxruntime extras / uv sync environment.
+onnxruntime-gpu[cuda,cudnn]==1.23.2
+pillow==13.0.0
+numpy==2.5.4
+# This cuDNN build was exercised on RTX 5060 / Windows 11.
+nvidia-cudnn-cu12==9.28.1.4

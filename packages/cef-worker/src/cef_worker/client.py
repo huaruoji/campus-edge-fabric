@@ -77,8 +77,11 @@ class WorkerAPI:
         meta = CompleteMeta.model_validate(meta).model_dump(mode="json")
         handles = []
         try:
+            import mimetypes
+
             for f in files:
-                handles.append(("files", (f.name, f.open("rb"), "application/octet-stream")))
+                mime = mimetypes.guess_type(f.name)[0] or "application/octet-stream"
+                handles.append(("files", (f.name, f.open("rb"), mime)))
             data = {"meta": CompleteMeta.model_validate(meta).model_dump_json()}
             resp = self._client.post(
                 f"{API}/workers/{worker_id}/tasks/{task_id}/complete",

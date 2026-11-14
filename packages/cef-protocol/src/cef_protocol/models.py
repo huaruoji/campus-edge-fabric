@@ -30,6 +30,7 @@ class JobSpec(_Model):
     workload: str
     params: dict[str, Any] = Field(default_factory=dict)
     name: str | None = None
+    submitter: str | None = None
     priority: int = 0
     required_tag: str | None = None
     inputs: list[InputSpec] = Field(default_factory=list)
@@ -39,6 +40,13 @@ class JobCreated(_Model):
     job_id: str
     total: int
     state: JobState
+
+
+class BlobBrief(_Model):
+    sha256: str
+    name: str = ""
+    size: int = 0
+    url: str | None = None
 
 
 class TaskView(_Model):
@@ -53,6 +61,9 @@ class TaskView(_Model):
     finished_at: float | None = None
     error: str | None = None
     output_sha256: str | None = None
+    inputs: list[BlobBrief] = Field(default_factory=list)
+    outputs: list[BlobBrief] = Field(default_factory=list)
+    summary: str | None = None
 
 
 class PerWorkerStat(_Model):
@@ -80,6 +91,9 @@ class JobSummary(_Model):
 
 class JobDetail(JobSummary):
     eta_s: float | None = None
+    params_text: str = ""
+    input_summary: str = ""
+    submitter: str | None = None
     per_worker: list[PerWorkerStat] = Field(default_factory=list)
     tasks: list[TaskView] = Field(default_factory=list)
     required_tag: str | None = None
@@ -326,6 +340,8 @@ class AgentContext(_Model):
 class AgentChatRequest(_Model):
     messages: list[ChatMessage] = Field(default_factory=list)
     context: AgentContext = Field(default_factory=AgentContext)
+    author: str = ""
+    room: str = "pool"
 
 
 class AgentPreview(_Model):
@@ -348,3 +364,45 @@ class AgentChatResponse(_Model):
     tool_trace: list[AgentToolTrace] = Field(default_factory=list)
     model: str = ""
     usage: dict[str, Any] | None = None
+    user_message_id: str | None = None
+    assistant_message_id: str | None = None
+
+
+class ChatEntry(_Model):
+    """One persisted transcript line, shared by everyone holding the token."""
+
+    id: str
+    room: str = "pool"
+    role: Literal["user", "assistant"]
+    author: str = ""
+    content: str
+    trace: list[AgentToolTrace] | None = None
+    preview: AgentPreview | None = None
+    job_id: str | None = None
+    created_at: float
+
+
+class ChatList(_Model):
+    messages: list[ChatEntry] = Field(default_factory=list)
+    latest: float = 0.0
+
+
+class TagSummary(_Model):
+    tag: str
+    category: str = "free"
+    total: int = 0
+    online: int = 0
+
+
+class TagList(_Model):
+    tags: list[TagSummary] = Field(default_factory=list)
+
+
+class WorkerPatch(_Model):
+    tags: list[str] = Field(default_factory=list)
+
+
+class WorkerPatchResponse(_Model):
+    worker_id: str
+    tags: list[str] = Field(default_factory=list)
+    rejected_tags: list[str] = Field(default_factory=list)

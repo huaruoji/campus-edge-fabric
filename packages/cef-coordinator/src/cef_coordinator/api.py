@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import mimetypes
 import os
 import shutil
 import sqlite3
@@ -14,9 +15,13 @@ from pathlib import Path
 from typing import Annotated, Any
 
 from cef_protocol import new_id
+from cef_protocol.describe import describe_job, describe_task
 from cef_protocol.models import (
     AgentChatRequest,
     AgentChatResponse,
+    BlobBrief,
+    ChatEntry,
+    ChatList,
     CompleteMeta,
     CompleteResponse,
     DrainResponse,
@@ -38,9 +43,13 @@ from cef_protocol.models import (
     PoolStats,
     RegisterRequest,
     RegisterResponse,
+    TagList,
+    TagSummary,
     TaskView,
     UtilPoint,
     WorkerList,
+    WorkerPatch,
+    WorkerPatchResponse,
     WorkerStats,
     WorkerView,
     WorkloadInfo,
@@ -48,6 +57,7 @@ from cef_protocol.models import (
     WorkloadSupport,
 )
 from cef_protocol.states import JobState, TaskState
+from cef_protocol.tags import categorize, normalize_tags
 from cef_protocol.workloads import WORKLOAD_UNITS, InvalidParams, param_schema, parse_frames, validate_params
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response
@@ -71,18 +81,25 @@ def _err(status: int, code: str, message: str) -> HTTPException:
     return HTTPException(status_code=status, detail={"error": {"code": code, "message": message}})
 
 
-def _blob_rows(conn: sqlite3.Connection, refs: list[tuple[str, str, int]]) -> None:
+def _blob_rows(conn: sqlite3.Connection, refs: list[tuple[str, str, int, str | None]]) -> None:
     now = time.time()
-    for sha, _name, size in refs:
+    for sha, name, size, mime in refs:
+        if not mime or mime == "application/octet-stream":
+            mime = mimetypes.guess_type(name)[0] or mime
         conn.execute(
-            "INSERT OR IGNORE INTO blobs (sha256, size, path, created_at) VALUES (?,?,?,?)",
-            (sha, size, "", now),
+            "INSERT OR IGNORE INTO blobs (sha256, size, path, mime, name, created_at) VALUES (?,?,?,?,?,?)",
+            (sha, size, "", mime, name, now),
+        )
+        # first writer wins for mime/name; a re-upload of the same bytes keeps them
+        conn.execute(
+            "UPDATE blobs SET mime=COALESCE(mime,?), name=COALESCE(name,?) WHERE sha256=?",
+            (mime, name, sha),
         )
 
 
-async def _spool(upload: UploadFile, store_: store.BlobStore) -> tuple[str, str, int]:
+async def _spool(upload: UploadFile, store_: store.BlobStore) -> tuple[str, str, int, str | None]:
     sha, size = store_.put_stream(upload.file)
-    return sha, upload.filename or sha[:12], size
+    return sha, upload.filename or sha[:12], size, upload.content_type
 
 
 # --------------------------------------------------------------------- health
@@ -121,7 +138,7 @@ async def create_job(
         raise _err(400, "invalid_params", str(exc)) from exc
     params = params_model.model_dump()
 
-    stored: list[tuple[str, str, int]] = []
+    stored: list[tuple[str, str, int, str | None]] = []
     tasks: list[tuple[int, dict[str, Any], list[dict[str, Any]]]] = []
 
     # disk guards: one oversized file or a full blob store must fail fast and
@@ -152,9 +169,9 @@ async def create_job(
             raise _err(400, "invalid_params", str(exc)) from exc
         if files[0].size is not None:
             _guard(files[0].size)
-        sha, name, size = await _spool(files[0], bs)
+        sha, name, size, mime = await _spool(files[0], bs)
         _guard(size)
-        stored.append((sha, name, size))
+        stored.append((sha, name, size, mime))
         ref = {"sha256": sha, "name": name, "size": size}
         for i, frame in enumerate(frames):
             tasks.append((i, {**params, "frame": frame}, [ref]))
@@ -166,9 +183,9 @@ async def create_job(
         for i, upload in enumerate(files):
             if upload.size is not None:
                 _guard(upload.size)
-            sha, name, size = await _spool(upload, bs)
+            sha, name, size, mime = await _spool(upload, bs)
             _guard(size)
-            stored.append((sha, name, size))
+            stored.append((sha, name, size, mime))
             if job_spec.inputs:
                 name = job_spec.inputs[i].name or name
             tasks.append((i, params, [{"sha256": sha, "name": name, "size": size}]))
@@ -188,7 +205,7 @@ async def create_job(
                 str(JobState.QUEUED),
                 int(job_spec.priority),
                 job_spec.required_tag,
-                None,
+                job_spec.submitter,
                 now,
             ),
         )
@@ -245,30 +262,21 @@ def get_job(request: Request, job_id: str, tasks_limit: int = Query(500, ge=0, l
         summary = _summary(job, counts)
         names = {r["id"]: r["name"] for r in db.rows(conn, "SELECT id,name FROM workers")}
         per_worker = _per_worker(conn, job_id, counts["succeeded"], names)
-        tasks = [
-            TaskView(
-                task_id=r["id"],
-                idx=r["idx"],
-                state=r["state"],
-                worker=r["worker_id"],
-                worker_name=names.get(r["worker_id"] or ""),
-                attempt=r["attempt"],
-                duration_s=r["duration"],
-                started_at=r["started_at"],
-                finished_at=r["finished_at"],
-                error=r["error"],
-                output_sha256=r["output_sha"],
-            )
-            for r in db.rows(conn, "SELECT * FROM tasks WHERE job_id=? ORDER BY idx LIMIT ?", (job_id, tasks_limit))
-        ]
+        rows = db.rows(conn, "SELECT * FROM tasks WHERE job_id=? ORDER BY idx LIMIT ?", (job_id, tasks_limit))
+        tasks = [_task_view(job["workload"], r, names) for r in rows]
         eta = _eta(conn, job, counts)
+        job_params = json.loads(job["params"] or "{}")
+        inputs = _job_inputs(conn, job_id)
         return JobDetail(
             **summary.model_dump(),
             eta_s=eta,
             per_worker=per_worker,
             tasks=tasks,
             required_tag=job["required_tag"],
-            params=json.loads(job["params"] or "{}"),
+            params=job_params,
+            params_text=describe_job(job["workload"], job_params),
+            input_summary=_input_summary(inputs),
+            submitter=job["submitter"],
         )
     finally:
         conn.close()
@@ -360,7 +368,10 @@ class _Cleanup:
 @router.post("/workers/register", response_model=RegisterResponse)
 def register_worker(request: Request, reg: RegisterRequest) -> RegisterResponse:
     s = settings_of(request)
-    row = scheduler.upsert_worker(s.db_path, reg.model_dump(), s)
+    payload = reg.model_dump()
+    tags, _rejected = normalize_tags(payload.get("tags"))
+    payload["tags"] = tags
+    row = scheduler.upsert_worker(s.db_path, payload, s)
     return RegisterResponse(
         worker_id=row["id"],
         lease_ttl_s=s.lease_ttl_s,
@@ -419,15 +430,19 @@ async def task_complete(
         cm = CompleteMeta.model_validate_json(meta)
     except ValueError as exc:
         raise _err(400, "invalid_params", f"bad meta: {exc}") from exc
-    refs: list[tuple[str, str, int]] = []
+    refs: list[tuple[str, str, int, str | None]] = []
     for upload in files:
         sha, size = bs.put_stream(upload.file)
-        refs.append((sha, upload.filename or sha[:12], size))
+        refs.append((sha, upload.filename or sha[:12], size, upload.content_type))
     output = cm.output or {}
-    output["files"] = [{"name": n, "sha256": sha, "size": size} for sha, n, size in refs]
+    output["files"] = [{"name": n, "sha256": sha, "size": size} for sha, n, size, _mime in refs]
     output_sha = refs[0][0] if len(refs) == 1 else (
         hashlib.sha256("".join(r[0] for r in refs).encode()).hexdigest() if refs else None
     )
+    # output mime is usually only inferable from the filename (worker uploads raw)
+    refs = [
+        (sha, name, size, mime or mimetypes.guess_type(name)[0]) for sha, name, size, mime in refs
+    ]
     ok, reason = scheduler.complete_task(
         s.db_path, s, worker_id, task_id, cm.attempt, cm.duration_s, output, output_sha
     )
@@ -632,11 +647,32 @@ def _bottleneck(online: int, queued: int, failed: int, retries: int, workers: li
 
 @router.get("/blobs/{sha}")
 def get_blob(request: Request, sha: str) -> Response:
+    """Raw bytes for an input or an output.
+
+    Content-Type matters now that the dashboard renders thumbnails: without it the
+    browser downloads instead of displaying. <img> cannot send an Authorization
+    header, so the UI fetches with the header and mints an object URL.
+    """
+    s = settings_of(request)
     bs = blobs_of(request)
     path = bs.path_for(sha)
     if not path.exists():
         raise _err(404, "not_found", f"blob {sha} not found")
-    return FileResponse(path, media_type="application/octet-stream", filename=sha)
+    mime = None
+    conn = db.reading(s.db_path)
+    try:
+        row = db.one(conn, "SELECT mime, name FROM blobs WHERE sha256=?", (sha,))
+        if row is not None:
+            mime = row["mime"]
+            if not mime and row["name"]:
+                mime = mimetypes.guess_type(str(row["name"]))[0]
+    finally:
+        conn.close()
+    return FileResponse(
+        path,
+        media_type=mime or "application/octet-stream",
+        headers={"Cache-Control": "private, max-age=86400"},
+    )
 
 
 @router.get("/events")
@@ -778,12 +814,26 @@ def agent_chat(request: Request, req: AgentChatRequest) -> AgentChatResponse:
     the actual POST /jobs comes from the human confirming in the UI.
     """
     s = settings_of(request)
+    author = (req.author or "").strip()[:40] or "队友"
+    last_user = next((m.content for m in reversed(req.messages) if m.role == "user"), "")
+    user_id = _save_chat(s.db_path, req.room, "user", author, last_user) if last_user else None
     try:
-        return agent.chat(req, s.port, s.token)
+        reply = agent.chat(req, s.port, s.token)
     except agent.AgentUnavailable as exc:
         raise _err(503, "agent_unavailable", str(exc)) from exc
     except agent.AgentError as exc:
         raise _err(502, "agent_error", str(exc)) from exc
+    reply.user_message_id = user_id
+    reply.assistant_message_id = _save_chat(
+        s.db_path,
+        req.room,
+        "assistant",
+        "算力助手",
+        reply.reply,
+        trace=[t.model_dump() for t in reply.tool_trace],
+        preview=reply.preview.model_dump() if reply.preview else None,
+    )
+    return reply
 
 
 @router.delete("/workers/{worker_id}", status_code=204)
@@ -818,3 +868,194 @@ def storage_usage(request: Request) -> dict[str, Any]:
         "disk_free_gb": free_gb,
         "disk_total_gb": total_gb,
     }
+
+
+# ------------------------------------------------------- job / task rendering
+def _blob_brief(ref: dict[str, Any]) -> BlobBrief:
+    sha = str(ref.get("sha256") or "")
+    return BlobBrief(
+        sha256=sha,
+        name=str(ref.get("name") or sha[:8]),
+        size=int(ref.get("size") or 0),
+        url=f"/api/v1/blobs/{sha}",
+    )
+
+
+def _task_view(workload: str, row: sqlite3.Row, names: dict[str, str]) -> TaskView:
+    output: dict[str, Any] = {}
+    try:
+        output = json.loads(row["output"] or "{}")
+    except ValueError:
+        output = {}
+    inputs_raw = json.loads(row["inputs"] or "[]")
+    outputs_raw = output.get("files", [])
+    task_params = json.loads(row["params"] or "{}")
+    return TaskView(
+        task_id=row["id"],
+        idx=row["idx"],
+        state=row["state"],
+        worker=row["worker_id"],
+        worker_name=names.get(row["worker_id"] or ""),
+        attempt=row["attempt"],
+        duration_s=row["duration"],
+        started_at=row["started_at"],
+        finished_at=row["finished_at"],
+        error=row["error"],
+        output_sha256=row["output_sha"],
+        inputs=[_blob_brief(ref) for ref in inputs_raw],
+        outputs=[_blob_brief(ref) for ref in outputs_raw],
+        summary=describe_task(workload, task_params, output),
+    )
+
+
+def _job_inputs(conn: sqlite3.Connection, job_id: str) -> list[dict[str, Any]]:
+    """Unique inputs of a job, so a 120-frame render does not count the .blend 120 times."""
+    seen: dict[str, dict[str, Any]] = {}
+    for row in db.rows(conn, "SELECT inputs FROM tasks WHERE job_id=?", (job_id,)):
+        for ref in json.loads(row["inputs"] or "[]"):
+            sha = str(ref.get("sha256") or "")
+            if sha and sha not in seen:
+                seen[sha] = ref
+    return list(seen.values())
+
+
+def _input_summary(inputs: list[dict[str, Any]]) -> str:
+    if not inputs:
+        return "无输入文件"
+    total = sum(int(ref.get("size") or 0) for ref in inputs)
+    return f"{len(inputs)} 个文件，共 {_fmt_bytes(total)}"
+
+
+def _fmt_bytes(size: int) -> str:
+    if size < 1024:
+        return f"{size}B"
+    if size < 1024 * 1024:
+        return f"{size / 1024:.0f}KB"
+    return f"{size / (1024 * 1024):.1f}MB"
+
+
+# ----------------------------------------------------------------------- chat
+def _save_chat(
+    db_path,
+    room: str,
+    role: str,
+    author: str,
+    content: str,
+    trace: list[dict[str, Any]] | None = None,
+    preview: dict[str, Any] | None = None,
+    job_id: str | None = None,
+) -> str:
+    message_id = new_id("msg")
+    with db.transaction(db_path) as conn:
+        conn.execute(
+            """INSERT INTO chat_messages (id, room, role, author, content, trace, preview, job_id, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (
+                message_id,
+                room or "pool",
+                role,
+                author[:40],
+                content[:4000],
+                json.dumps(trace, ensure_ascii=False) if trace else None,
+                json.dumps(preview, ensure_ascii=False) if preview else None,
+                job_id,
+                time.time(),
+            ),
+        )
+    return message_id
+
+
+@router.get("/chat/messages", response_model=ChatList)
+def chat_messages(
+    request: Request,
+    room: str = "pool",
+    after: float = Query(0.0, ge=0.0),
+    limit: int = Query(200, ge=1, le=500),
+) -> ChatList:
+    """Incremental transcript. Everyone with the token sees the same room."""
+    s = settings_of(request)
+    conn = db.reading(s.db_path)
+    try:
+        if after > 0:
+            rows = db.rows(
+                conn,
+                "SELECT * FROM chat_messages WHERE room=? AND created_at > ? ORDER BY created_at ASC LIMIT ?",
+                (room, after, limit),
+            )
+        else:
+            rows = db.rows(
+                conn,
+                "SELECT * FROM (SELECT * FROM chat_messages WHERE room=? ORDER BY created_at DESC LIMIT ?) ORDER BY created_at ASC",
+                (room, limit),
+            )
+        latest = db.one(conn, "SELECT MAX(created_at) m FROM chat_messages WHERE room=?", (room,))
+    finally:
+        conn.close()
+    messages = [
+        ChatEntry(
+            id=r["id"],
+            room=r["room"],
+            role=r["role"],
+            author=r["author"],
+            content=r["content"],
+            trace=json.loads(r["trace"]) if r["trace"] else None,
+            preview=json.loads(r["preview"]) if r["preview"] else None,
+            job_id=r["job_id"],
+            created_at=r["created_at"],
+        )
+        for r in rows
+    ]
+    return ChatList(messages=messages, latest=float(latest["m"] or 0.0) if latest else 0.0)
+
+
+@router.delete("/chat/messages", status_code=200)
+def chat_prune(request: Request, older_than_days: float = Query(7.0, ge=0.0)) -> dict[str, Any]:
+    """Trim the shared transcript (keeps the newest 200 messages regardless)."""
+    s = settings_of(request)
+    cutoff = time.time() - older_than_days * 86400
+    with db.transaction(s.db_path) as conn:
+        removed = conn.execute(
+            "DELETE FROM chat_messages WHERE created_at < ? AND id NOT IN "
+            "(SELECT id FROM chat_messages ORDER BY created_at DESC LIMIT 200)",
+            (cutoff,),
+        ).rowcount
+    return {"removed": removed, "older_than_days": older_than_days}
+
+
+# ----------------------------------------------------------------------- tags
+@router.get("/tags", response_model=TagList)
+def list_tags(request: Request) -> TagList:
+    """Aggregated tag inventory: what tags exist, how many devices carry each."""
+    s = settings_of(request)
+    conn = db.reading(s.db_path)
+    try:
+        rows = db.rows(conn, "SELECT tags, state FROM workers")
+    finally:
+        conn.close()
+    counts: dict[str, dict[str, int]] = {}
+    for row in rows:
+        online = 1 if row["state"] != "offline" else 0
+        for tag in json.loads(row["tags"] or "[]"):
+            entry = counts.setdefault(str(tag), {"total": 0, "online": 0})
+            entry["total"] += 1
+            entry["online"] += online
+    return TagList(
+        tags=[
+            TagSummary(tag=tag, category=categorize(tag), total=v["total"], online=v["online"])
+            for tag, v in sorted(counts.items())
+        ]
+    )
+
+
+@router.patch("/workers/{worker_id}", response_model=WorkerPatchResponse)
+def patch_worker(request: Request, worker_id: str, patch: WorkerPatch) -> WorkerPatchResponse:
+    """Replace a device's tags. Values are normalised; rejected ones come back."""
+    s = settings_of(request)
+    tags, rejected = normalize_tags(patch.tags)
+    with db.transaction(s.db_path) as conn:
+        row = db.one(conn, "SELECT id FROM workers WHERE id=?", (worker_id,))
+        if row is None:
+            raise _err(404, "not_found", f"worker {worker_id} not found")
+        conn.execute("UPDATE workers SET tags=? WHERE id=?", (json.dumps(tags), worker_id))
+        scheduler._event(conn, "worker_tags_updated", worker_id=worker_id, message=",".join(tags))
+    return WorkerPatchResponse(worker_id=worker_id, tags=tags, rejected_tags=rejected)

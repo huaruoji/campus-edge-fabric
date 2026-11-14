@@ -177,3 +177,61 @@ cef workers / cef stats
 ### DELETE /api/v1/workers/{worker_id}
 删除一台设备记录（清理仪表盘）。它会先把自己持有的未完成任务放回队列，不会丢任务。
 **204** 成功 / **404** 不存在。
+## 7. 共享对话、标签治理、任务可读化（v1 增补）
+
+### GET /api/v1/chat/messages?room=pool&after=<created_at>&limit=200
+
+共享对话记录（所有持 token 的人看到同一份）。`after` 是 `created_at` 浮点游标，返回升序增量；不传则返回最近 200 条。
+
+```jsonc
+{"messages": [{"id": "msg_…", "room": "pool", "role": "user|assistant",
+  "author": "alic", "content": "把图压到 512", "trace": null, "preview": null,
+  "job_id": null, "created_at": 1794644475.9}],
+ "latest": 1794644475.9}
+```
+
+### POST /api/v1/agent/chat（行为升级）
+
+请求体新增 `author`（昵称）与 `room`；服务端会把 user 消息和 assistant 回复都落库，响应新增
+`user_message_id` / `assistant_message_id`。前端不需要再单独 POST 一条消息。
+
+### DELETE /api/v1/chat/messages?older_than_days=7
+
+裁剪历史，始终保留最新 200 条。返回 `{removed, older_than_days}`。
+
+### GET /api/v1/tags
+
+```jsonc
+{"tags": [{"tag": "bench-jochi", "category": "bench", "total": 1, "online": 1}]}
+```
+
+`category` ∈ `role` / `hw` / `site` / `bench` / `free`。标签在服务端规范化：小写、下划线转连字符、
+只允许 `a-z0-9.:-`、去重排序、最长 24 字符、最多 8 个。
+
+### PATCH /api/v1/workers/{worker_id}
+
+```jsonc
+// 请求
+{"tags": ["role:gpu", "hw:rtx5060"]}
+// 响应
+{"worker_id": "w_…", "tags": ["hw:rtx5060", "role:gpu"], "rejected_tags": []}
+```
+
+### GET /api/v1/jobs/{job_id}（新增字段）
+
+| 字段 | 说明 |
+|---|---|
+| `params_text` | 人类可读参数摘要，如「缩略图，长边 512px，WEBP，质量 80」 |
+| `input_summary` | 「12 个文件，共 3.4MB」（按 sha 去重，blender 只算一次 .blend） |
+| `submitter` | 提交者昵称（`JobSpec.submitter`，可空） |
+| `tasks[].inputs` / `tasks[].outputs` | `[{sha256, name, size, url}]`，url 指向 `/api/v1/blobs/{sha}` |
+| `tasks[].summary` | 单任务摘要，如「900×600 → 512×341，WEBP 18KB」/「3 个目标」/「第 42 帧」 |
+
+### GET /api/v1/blobs/{sha}（变更）
+
+现在返回正确的 `Content-Type`（上传时记录，缺失则按文件名推断）并带 `Cache-Control: private, max-age=86400`。
+仍然需要 `Authorization`；`<img>` 无法带 header，前端应 fetch 后转 objectURL。
+
+### 提交者
+
+`POST /api/v1/jobs` 的 spec 支持 `submitter` 字段；CLI 会用 `CEF_SUBMITTER` 或系统用户名兜底。MD

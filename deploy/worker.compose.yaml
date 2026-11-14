@@ -1,0 +1,26 @@
+# Run a worker as a container (NAS / headless box).
+#   docker compose -f deploy/worker.compose.yaml up -d
+services:
+  cef-worker:
+    build:
+      context: ..
+      dockerfile: deploy/worker.Dockerfile
+    image: cef-worker:local
+    restart: unless-stopped
+    environment:
+      CEF_TOKEN: ${CEF_TOKEN:?set CEF_TOKEN in the shell or a .env file}
+    command:
+      - --server
+      - https://cef.huaruoji.com
+      - --name
+      - ${CEF_WORKER_NAME:-nas}
+      - --slots
+      - ${CEF_SLOTS:-2}
+      - --workloads
+      - thumbnail,infer
+      - --data
+      - /data
+    volumes:
+      - cef-worker-data:/data
+volumes:
+  cef-worker-data:

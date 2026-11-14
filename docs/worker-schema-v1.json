@@ -479,6 +479,11 @@
           "title": "Name",
           "type": "string"
         },
+        "agent_version": {
+          "default": "",
+          "title": "Agent Version",
+          "type": "string"
+        },
         "hostname": {
           "default": "",
           "title": "Hostname",

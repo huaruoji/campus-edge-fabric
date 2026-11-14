@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS workers (
   workloads     TEXT NOT NULL DEFAULT '[]',
   slots         INTEGER NOT NULL DEFAULT 1,
   max_batch     INTEGER NOT NULL DEFAULT 4,
+  agent_version TEXT,
   state         TEXT NOT NULL,
   last_seen     REAL,
   registered_at REAL,
@@ -188,6 +189,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         },
         "workers": {
             "speed_s": "REAL",
+            "agent_version": "TEXT",
         },
         "blobs": {
             "mime": "TEXT",

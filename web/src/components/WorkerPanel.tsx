@@ -257,8 +257,9 @@ function engineFromTags(tags: string[]): string | null {
   return tag ? tag.slice("engine:".length) : null;
 }
 
-function modelText(models: WorkloadSupport["models"]): string {
-  if (models.length === 0) return "—";
+/** 模型列表压成一行：yolo11n ab12cd34ef56、…；没有模型时返回 null（整行不显示）。 */
+function modelText(models: WorkloadSupport["models"]): string | null {
+  if (models.length === 0) return null;
   return models.map((model) => model.name + " " + model.sha256.slice(0, 12)).join("、");
 }
 
@@ -281,48 +282,39 @@ function CapabilityMatrix({ worker }: { worker: Worker }) {
             : "缺 " + missing.length + " 项"}
         </span>
       </div>
-      <div className="capability-wrap">
-        <table className="capability-table" aria-label={worker.name + " 的环境能力"}>
-          <thead>
-            <tr>
-              <th>工作负载</th>
-              <th>版本</th>
-              <th>引擎</th>
-              <th>模型 sha</th>
-              <th>状态</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.kind} className={row.available ? undefined : "capability-row--missing"}>
-                <td>{workloadLabel(row.kind)}</td>
-                <td className="mono">{row.version ?? "—"}</td>
-                <td>{row.engine ?? engineFromTags(worker.tags) ?? "—"}</td>
-                <td className="mono capability-model" title={row.models.map((model) => model.name + " " + model.sha256).join("\n")}>
-                  {modelText(row.models)}
-                </td>
-                <td>
-                  {row.available ? (
-                    <span className="badge badge--ok">可用</span>
-                  ) : (
-                    <span className="badge badge--warn">缺失</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {missing.length > 0 ? (
-        <ul className="worker-missing">
-          {missing.map((row) => (
-            <li key={row.kind}>
-              <span className="mono">{row.kind}</span>
-              {row.reason ? "：" + row.reason : "：设备没有说明原因"}
+      <ul className="capability-list">
+        {rows.map((row) => {
+          const models = modelText(row.models);
+          const engine = row.engine ?? engineFromTags(worker.tags);
+          return (
+            <li key={row.kind} className={row.available ? "capability-item" : "capability-item capability-item--missing"}>
+              <div className="capability-line">
+                <span className="capability-kind">{workloadLabel(row.kind)}</span>
+                {row.available ? (
+                  <span className="badge badge--ok">可用</span>
+                ) : (
+                  <span className="badge badge--warn">缺失</span>
+                )}
+              </div>
+              <div className="capability-meta">
+                <span className="mono" title={row.version ?? undefined}>{row.version ?? "版本未知"}</span>
+                <span className="capability-engine">{engine ?? "引擎未知"}</span>
+                {models ? (
+                  <span
+                    className="mono capability-model"
+                    title={row.models.map((model) => model.name + " " + model.sha256).join("\n")}
+                  >
+                    模型 {models}
+                  </span>
+                ) : null}
+              </div>
+              {!row.available ? (
+                <p className="capability-reason">{row.reason ?? "设备没有说明缺什么"}</p>
+              ) : null}
             </li>
-          ))}
-        </ul>
-      ) : null}
+          );
+        })}
+      </ul>
     </div>
   );
 }

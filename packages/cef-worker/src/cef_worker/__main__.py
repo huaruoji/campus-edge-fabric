@@ -3,7 +3,7 @@
     cef-worker run --server http://192.168.1.10:8080 --token XXX
     cef-worker doctor --server http://192.168.1.10:8080 --token XXX
 
-\`run\` is the whole installation on a teammate's machine: it registers, advertises
+cef-worker run is the whole installation on a device: it registers, advertises
 the workloads it can actually execute, and blocks until Ctrl-C (which drains
 gracefully so in-flight tasks are not wasted).
 """
@@ -63,6 +63,11 @@ def build_parser() -> argparse.ArgumentParser:
     common(doc)
     doc.add_argument("--workloads", default="")
     doc.add_argument("--model-dir", default=None)
+
+    upd = sub.add_parser("update", help="git pull + uv sync --inexact（保留手工装的包）")
+    upd.add_argument("--check", action="store_true", help="只对比版本，不更新")
+    upd.add_argument("--restart", action="store_true", help="更新后尝试 systemctl restart cef-worker")
+    common(upd)
 
     sub.add_parser("info", help="print default config")
     return p
@@ -144,6 +149,9 @@ def main(argv: list[str] | None = None) -> int:
             ok = False
         return 0 if ok else 1
 
+    if args.cmd == "update":
+        return cmd_update(args)
+
     if args.cmd == "info":
         print(json.dumps(
             {
@@ -163,3 +171,66 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def _repo_root() -> Path | None:
+    """Locate the git checkout this worker was installed from."""
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        if (parent / ".git").exists() and (parent / "pyproject.toml").exists():
+            return parent
+    return None
+
+
+def cmd_update(args: argparse.Namespace) -> int:
+    """Update a device's worker in place.
+
+    --inexact is deliberate: a plain uv sync would uninstall packages the owner
+    added by hand (onnxruntime-gpu from the provision recipe), silently turning a
+    GPU worker back into a CPU one.
+    """
+    import subprocess
+
+    root = _repo_root()
+    print(f"cef-worker {__version__}")
+    if root is None:
+        print("没有找到 git 仓库（这个 worker 不是从源码目录启动的）。", file=sys.stderr)
+        print("请回到安装目录执行：git pull && uv sync --package cef-worker --inexact", file=sys.stderr)
+        return 2
+    print(f"仓库: {root}")
+
+    if getattr(args, "check", False):
+        try:
+            subprocess.run(["git", "-C", str(root), "fetch", "-q", "origin"], timeout=60, check=False)
+            remote = subprocess.run(
+                ["git", "-C", str(root), "log", "-1", "--format=%h %s", "origin/main"],
+                capture_output=True, text=True, timeout=30, check=False,
+            ).stdout.strip()
+            local = subprocess.run(
+                ["git", "-C", str(root), "log", "-1", "--format=%h %s", "HEAD"],
+                capture_output=True, text=True, timeout=30, check=False,
+            ).stdout.strip()
+        except Exception as exc:  # noqa: BLE001
+            print(f"无法读取 git 状态: {exc}", file=sys.stderr)
+            return 1
+        print(f"本地 {local}\n远端 {remote}")
+        return 0 if remote and remote == local else 1
+
+    steps = [
+        ["git", "-C", str(root), "pull", "--ff-only"],
+        ["uv", "sync", "--package", "cef-worker", "--package", "cef-client", "--inexact"],
+    ]
+    for argv in steps:
+        print("$ " + " ".join(argv))
+        proc = subprocess.run(argv, cwd=str(root), check=False)
+        if proc.returncode != 0:
+            print(f"失败（退出码 {proc.returncode}）。", file=sys.stderr)
+            return proc.returncode
+
+    print("代码与依赖已更新。")
+    if getattr(args, "restart", False):
+        proc = subprocess.run(["systemctl", "restart", "cef-worker"], check=False)
+        print("systemctl restart cef-worker ->", proc.returncode)
+        return proc.returncode
+    print("重启 worker 后生效：systemctl restart cef-worker（或 Ctrl-C 后重新运行启动命令）")
+    return 0

@@ -81,6 +81,7 @@ class Agent:
         name = self.cfg.name or hostname
         return {
             "worker_id": self.worker_id,
+            "agent_version": __version__,
             "name": name,
             "hostname": hostname,
             "os": f"{platform.system()} {platform.release()}",

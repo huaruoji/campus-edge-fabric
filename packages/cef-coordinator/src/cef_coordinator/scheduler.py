@@ -53,8 +53,8 @@ def upsert_worker(db_path, reg: dict[str, Any], settings: Settings) -> sqlite3.R
             worker_id = reg.get("worker_id") or new_id("w")
             conn.execute(
                 """INSERT INTO workers (id,name,hostname,os,cpu_count,tags,workloads,slots,max_batch,
-                                        state,last_seen,registered_at,meta)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                        agent_version,state,last_seen,registered_at,meta)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     worker_id,
                     reg.get("name") or "worker",
@@ -65,6 +65,7 @@ def upsert_worker(db_path, reg: dict[str, Any], settings: Settings) -> sqlite3.R
                     _json(reg.get("workloads") or []),
                     max(1, int(reg.get("slots") or 1)),
                     max(1, int(reg.get("max_batch") or 4)),
+                    reg.get("agent_version") or None,
                     "online",
                     now,
                     now,
@@ -80,7 +81,7 @@ def upsert_worker(db_path, reg: dict[str, Any], settings: Settings) -> sqlite3.R
             tags_json = _json(incoming) if incoming else (existing["tags"] or "[]")
             conn.execute(
                 """UPDATE workers SET name=?,hostname=?,os=?,cpu_count=?,tags=?,workloads=?,
-                       slots=?,max_batch=?,state='online',last_seen=?,meta=? WHERE id=?""",
+                       slots=?,max_batch=?,agent_version=?,state='online',last_seen=?,meta=? WHERE id=?""",
                 (
                     reg.get("name") or existing["name"],
                     reg.get("hostname", existing["hostname"]),
@@ -90,6 +91,7 @@ def upsert_worker(db_path, reg: dict[str, Any], settings: Settings) -> sqlite3.R
                     _json(reg.get("workloads") or []),
                     max(1, int(reg.get("slots") or existing["slots"])),
                     max(1, int(reg.get("max_batch") or existing["max_batch"])),
+                    reg.get("agent_version") or existing["agent_version"],
                     now,
                     _json(reg.get("meta") or {}),
                     worker_id,

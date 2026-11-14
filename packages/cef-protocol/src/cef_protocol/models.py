@@ -127,6 +127,8 @@ class WorkloadSupport(_Model):
 class RegisterRequest(_Model):
     worker_id: str | None = None
     name: str
+    #: agent build the device is running; the dashboard flags version drift
+    agent_version: str = ""
     hostname: str = ""
     os: str = ""
     cpu_count: int = 1
@@ -254,6 +256,7 @@ class DrainResponse(_Model):
 class WorkerView(_Model):
     worker_id: str
     name: str
+    agent_version: str | None = None
     hostname: str = ""
     os: str = ""
     cpu_count: int = 1
@@ -324,6 +327,15 @@ class WorkloadInfo(_Model):
 
 class WorkloadList(_Model):
     workloads: list[WorkloadInfo]
+
+
+class Compat(_Model):
+    """What version a device should be running, and how to get there."""
+
+    coordinator_version: str
+    min_worker_version: str
+    update_command: str
+    upgrade_notes: str = ""
 
 
 class Health(_Model):

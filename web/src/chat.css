@@ -878,52 +878,69 @@
   font-weight: 600;
 }
 
-.capability-wrap {
-  overflow-x: auto;
+.capability-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.capability-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
+.capability-item {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
 }
 
-.capability-table th {
-  padding: 0 8px 4px 0;
-  color: var(--text-muted);
+.capability-item--missing {
+  border-color: var(--amber-600);
+  background: var(--warn-soft);
+}
+
+.capability-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.capability-kind {
+  color: var(--text);
+  font-size: 13px;
   font-weight: 600;
-  text-align: start;
-  white-space: nowrap;
 }
 
-.capability-table td {
-  padding: 4px 8px 4px 0;
-  border-top: 1px solid var(--border);
-  overflow-wrap: anywhere;
-  vertical-align: top;
-}
-
-.capability-table .mono {
+.capability-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.capability-meta .mono {
   font-family: var(--font-mono);
   font-size: 11px;
 }
 
-.capability-row--missing td {
-  background: var(--warn-soft);
+.capability-engine {
+  text-transform: lowercase;
 }
 
 .capability-model {
-  max-width: 16rem;
+  overflow-wrap: anywhere;
 }
 
-.worker-missing {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-  padding-inline-start: 16px;
+.capability-reason {
+  margin: 2px 0 0;
   color: var(--warn);
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .provision-panel {

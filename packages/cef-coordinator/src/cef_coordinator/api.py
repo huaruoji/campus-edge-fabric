@@ -22,6 +22,7 @@ from cef_protocol.models import (
     BlobBrief,
     ChatEntry,
     ChatList,
+    Compat,
     CompleteMeta,
     CompleteResponse,
     DatasetDetail,
@@ -534,6 +535,7 @@ def list_workers(request: Request) -> WorkerList:
                 WorkerView(
                     worker_id=w["id"],
                     name=w["name"],
+                    agent_version=w["agent_version"] if "agent_version" in w.keys() else None,
                     hostname=w["hostname"] or "",
                     os=w["os"] or "",
                     cpu_count=w["cpu_count"] or 1,
@@ -1357,3 +1359,19 @@ def provision_result(request: Request, worker_id: str, provision_id: str, body: 
         )
         updated = db.one(conn, "SELECT * FROM provision_requests WHERE id=?", (provision_id,))
     return _provision_row(updated)
+
+
+@router.get("/compat", response_model=Compat)
+def compat(request: Request) -> Compat:
+    """Version handshake: a device can ask what it should be running.
+
+    The coordinator never pushes code. It states the requirement; the device (or
+    its owner) runs 'cef-worker update', which is the same git+uv path used at
+    install time.
+    """
+    return Compat(
+        coordinator_version=request.app.state.version,
+        min_worker_version=request.app.state.version,
+        update_command="cef-worker update",
+        upgrade_notes="更新会执行 git pull + uv sync --inexact（保留手工装过的包，比如 onnxruntime-gpu），然后需要重启 worker",
+    )

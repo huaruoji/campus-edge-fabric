@@ -174,7 +174,7 @@ export default function App() {
 
         <footer className="app-footer">
           <span>Campus Edge Fabric · 边缘算力调度仪表盘</span>
-          <span>接口契约 docs/api.md（v1 冻结）</span>
+          <span>接口契约 docs/api.md（v1 冻结）· push 即自动构建</span>
           <span>轮询：设备 3s · 统计 5s · 任务 5s · 详情 2s</span>
           <span className="mono">{api.baseUrl || "未配置地址"}/api/v1</span>
         </footer>

@@ -484,7 +484,7 @@ def list_workloads(request: Request) -> WorkloadList:
         workers = db.rows(conn, "SELECT name, workloads FROM workers WHERE state != 'offline'")
     finally:
         conn.close()
-    kinds = sorted({w.instance for w in _workload_kinds()})
+    kinds = sorted(str(kind) for kind in _workload_kinds())
     out = []
     for kind in kinds:
         available = [

@@ -7,9 +7,11 @@ interface Props {
   stats: PollState<StatsResponse>;
   health: PollState<HealthResponse>;
   onRefresh: () => void;
+  /** 页面顶部已有全局错误横幅时，不再重复渲染同一条错误。 */
+  hideError?: boolean;
 }
 
-export function StatsStrip({ stats, health, onRefresh }: Props) {
+export function StatsStrip({ stats, health, onRefresh, hideError = false }: Props) {
   const data = stats.data;
   const online = health.data?.workers_online ?? data?.workers_online ?? (data ? data.workers.length : null);
   const jobs = data?.jobs ?? {};
@@ -39,19 +41,19 @@ export function StatsStrip({ stats, health, onRefresh }: Props) {
           <div className="stat-label">任务总览</div>
           <div className="stat-chips">
             <span className="stat-chip">
-              总计 <b>{formatNumber(jobs.total)}</b>
+              作业总数 <b>{formatNumber(jobs.total)}</b>
             </span>
             <span className="stat-chip stat-chip--info">
-              排队 <b>{formatNumber(jobs.queued)}</b>
+              进行中作业 <b>{formatNumber(jobs.running)}</b>
             </span>
             <span className="stat-chip stat-chip--info">
-              运行 <b>{formatNumber(jobs.running)}</b>
+              排队任务 <b>{formatNumber(jobs.queued)}</b>
             </span>
             <span className="stat-chip stat-chip--ok">
-              成功 <b>{formatNumber(jobs.succeeded)}</b>
+              成功任务 <b>{formatNumber(jobs.succeeded)}</b>
             </span>
             <span className="stat-chip stat-chip--err">
-              失败 <b>{formatNumber(jobs.failed)}</b>
+              失败任务 <b>{formatNumber(jobs.failed)}</b>
             </span>
           </div>
         </div>
@@ -64,7 +66,7 @@ export function StatsStrip({ stats, health, onRefresh }: Props) {
         </div>
       ) : null}
 
-      {stats.error ? <ErrorBox error={stats.error} onRetry={onRefresh} compact /> : null}
+      {stats.error && !hideError ? <ErrorBox error={stats.error} onRetry={onRefresh} compact /> : null}
 
       <div className="strip-foot">
         <UpdatedInfo updatedAt={stats.updatedAt} />

@@ -40,12 +40,16 @@ export function JobSubmitForm({ api, workloads, onSubmitted }: Props) {
   const selected = workloadList.find((item) => item.kind === kind) ?? workloadList[0];
 
   // 首次拿到 workload（或切换 workload）时，按 params_schema 填充默认参数。
+  // key 里带上数据来源：/workloads 迟到时要用真实 schema 覆盖内置兜底值，
+  // 但同一来源的轮询刷新不能覆盖用户已经改过的参数。
   useEffect(() => {
     if (!selected) return;
-    if (lastKindRef.current === selected.kind) return;
-    lastKindRef.current = selected.kind;
+    const source = workloads.data ? "live" : "fallback";
+    const key = selected.kind + ":" + source;
+    if (lastKindRef.current === key) return;
+    lastKindRef.current = key;
     setParamsText(JSON.stringify(defaultParamsFromSchema(selected.params_schema), null, 2));
-  }, [selected]);
+  }, [selected, workloads.data]);
 
   // 当前选中的 workload 不在最新列表里时回退到第一项。
   useEffect(() => {
@@ -202,7 +206,11 @@ export function JobSubmitForm({ api, workloads, onSubmitted }: Props) {
               onChange={(event) => setParamsText(event.target.value)}
               spellCheck={false}
             />
-            <span className="field-hint">已按 params_schema 预填默认值，可手动修改；提交后端会再次校验。</span>
+            <span className="field-hint">
+              {schemaHints.length > 0
+                ? "已按 params_schema 预填默认值，可手动修改；提交后端会再次校验。"
+                : "该工作负载未声明参数；如需参数请填写合法 JSON 对象，提交后端会校验。"}
+            </span>
           </label>
 
           <div className="schema-hints">

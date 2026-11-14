@@ -73,6 +73,13 @@ export default function App() {
     window.location.hash = hash;
   }
 
+  const probeError = health.error ?? workers.error ?? stats.error ?? jobs.error;
+  const bannerError =
+    probeError instanceof CefApiError &&
+    (probeError.kind === "unauthorized" || probeError.kind === "network" || probeError.kind === "server")
+      ? probeError
+      : null;
+
   function renderBanner() {
     if (!api.hasToken) {
       return (
@@ -85,22 +92,17 @@ export default function App() {
       );
     }
     // /health 在后端是免鉴权的，所以 token 错误只能从需要鉴权的接口上看出来。
-    const probeError = health.error ?? workers.error ?? stats.error ?? jobs.error;
-    if (probeError) {
-      const message = toUserMessage(probeError);
-      const kind = probeError instanceof CefApiError ? probeError.kind : "http";
-      if (kind !== "unauthorized" && kind !== "network" && kind !== "server") return null;
-      return (
-        <div className={"banner " + (kind === "unauthorized" ? "banner--err" : "banner--warn")}>
-          <div className="banner-title">{message.title}</div>
-          <div className="banner-detail">{message.detail}</div>
-          <button type="button" className="btn btn--sm btn--ghost" onClick={refreshAll}>
-            重新检测
-          </button>
-        </div>
-      );
-    }
-    return null;
+    if (!bannerError) return null;
+    const message = toUserMessage(bannerError);
+    return (
+      <div className={"banner " + (bannerError.kind === "unauthorized" ? "banner--err" : "banner--warn")}>
+        <div className="banner-title">{message.title}</div>
+        <div className="banner-detail">{message.detail}</div>
+        <button type="button" className="btn btn--sm btn--ghost" onClick={refreshAll}>
+          重新检测
+        </button>
+      </div>
+    );
   }
 
   const runningJobs = stats.data?.jobs.running;
@@ -108,9 +110,14 @@ export default function App() {
 
   return (
     <div className="app">
-      <ConnectionBar settings={settings} health={health} onApply={applySettings} />
+      <ConnectionBar settings={settings} health={health} onApply={applySettings} probeError={probeError} />
 
-      <StatsStrip stats={stats} health={health} onRefresh={stats.refresh} />
+      <StatsStrip
+        stats={stats}
+        health={health}
+        onRefresh={stats.refresh}
+        hideError={Boolean(bannerError)}
+      />
 
       <nav className="tabs" aria-label="主导航">
         <a className={"tab" + (activeTab === "devices" ? " tab--active" : "")} href="#/devices">
@@ -136,7 +143,7 @@ export default function App() {
             hint="填写 Token 并应用后，即可查看设备、提交任务与查看任务详情。若后端尚未启动，页面会显示明确的连接失败提示，而不是白屏。"
           />
         ) : route.name === "devices" ? (
-          <WorkerPanel workers={workers} onRefresh={workers.refresh} />
+          <WorkerPanel workers={workers} onRefresh={workers.refresh} hideError={Boolean(bannerError)} />
         ) : route.name === "submit" ? (
           <JobSubmitForm
             api={api}
@@ -148,9 +155,16 @@ export default function App() {
             jobs={jobs}
             onOpen={(jobId) => navigate("#/jobs/" + encodeURIComponent(jobId))}
             onRefresh={jobs.refresh}
+            hideError={Boolean(bannerError)}
           />
         ) : (
-          <JobDetail key={route.jobId} api={api} jobId={route.jobId} onBack={() => navigate("#/jobs")} />
+          <JobDetail
+            key={route.jobId}
+            api={api}
+            jobId={route.jobId}
+            onBack={() => navigate("#/jobs")}
+            hideError={Boolean(bannerError)}
+          />
         )}
 
         <footer className="app-footer">

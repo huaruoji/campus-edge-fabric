@@ -25,13 +25,15 @@ interface Props {
   api: ApiClient;
   jobId: string;
   onBack: () => void;
+  /** 页面顶部已有全局错误横幅时，不再重复渲染同一条错误。 */
+  hideError?: boolean;
 }
 
 /**
  * 任务详情：GET /api/v1/jobs/{id}，2 秒轮询直到离开页面。
  * 展示进度、ETA、per_worker 分解、任务明细（分页），并提供结果包下载。
  */
-export function JobDetail({ api, jobId, onBack }: Props) {
+export function JobDetail({ api, jobId, onBack, hideError = false }: Props) {
   const poll = usePolling((signal) => api.getJob(jobId, signal), 2000, api.hasToken, [api, jobId]);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(20);
@@ -124,7 +126,9 @@ export function JobDetail({ api, jobId, onBack }: Props) {
         </div>
       </div>
 
-      {poll.error ? <ErrorBox error={poll.error} onRetry={poll.refresh} compact={Boolean(job)} /> : null}
+      {poll.error && !hideError ? (
+        <ErrorBox error={poll.error} onRetry={poll.refresh} compact={Boolean(job)} />
+      ) : null}
       {actionError ? <ErrorBox error={actionError} /> : null}
       {notice ? <div className="notice">{notice}</div> : null}
 
@@ -132,7 +136,14 @@ export function JobDetail({ api, jobId, onBack }: Props) {
         poll.loading ? (
           <LoadingLine text="正在读取任务详情…" />
         ) : (
-          <EmptyBox title="任务详情不可用" hint="请检查任务 ID 是否正确，或返回任务列表刷新后重试。" />
+          <EmptyBox
+            title="任务详情不可用"
+            hint={
+              hideError
+                ? "原因见页面顶部提示；修复后会自动恢复轮询。"
+                : "请检查任务 ID 是否正确，或返回任务列表刷新后重试。"
+            }
+          />
         )
       ) : (
         <>
@@ -175,7 +186,7 @@ export function JobDetail({ api, jobId, onBack }: Props) {
               </div>
               <div className="kv">
                 <dt>预计剩余</dt>
-                <dd>{formatEta(job.eta_s)}</dd>
+                <dd>{terminal ? "—" : formatEta(job.eta_s)}</dd>
               </div>
               <div className="kv">
                 <dt>完成时间</dt>

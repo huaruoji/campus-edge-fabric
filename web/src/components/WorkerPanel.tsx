@@ -6,9 +6,11 @@ import { Bar, EmptyBox, ErrorBox, LoadingLine, Section, StateBadge, UpdatedInfo 
 interface Props {
   workers: PollState<Worker[]>;
   onRefresh: () => void;
+  /** 页面顶部已有全局错误横幅时，不再重复渲染同一条错误。 */
+  hideError?: boolean;
 }
 
-export function WorkerPanel({ workers, onRefresh }: Props) {
+export function WorkerPanel({ workers, onRefresh, hideError = false }: Props) {
   const list = workers.data ?? [];
   return (
     <Section
@@ -23,13 +25,16 @@ export function WorkerPanel({ workers, onRefresh }: Props) {
         </>
       }
     >
-      {workers.error ? (
+      {workers.error && !hideError ? (
         <ErrorBox error={workers.error} onRetry={onRefresh} compact={Boolean(workers.data)} />
       ) : null}
 
       {!workers.data && workers.loading ? <LoadingLine text="正在读取设备列表…" /> : null}
       {!workers.data && !workers.loading && !workers.error ? (
         <EmptyBox title="暂无设备数据" hint="Worker 启动并注册后会出现在这里。" />
+      ) : null}
+      {!workers.data && workers.error && hideError ? (
+        <EmptyBox title="设备数据暂不可用" hint="原因见页面顶部提示；修复后会自动恢复轮询，无需刷新页面。" />
       ) : null}
       {workers.data && list.length === 0 ? (
         <EmptyBox

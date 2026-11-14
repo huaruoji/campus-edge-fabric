@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { ConnectionSettings, HealthResponse } from "../api";
-import { normalizeBaseUrl, toUserMessage } from "../api";
+import { CefApiError, normalizeBaseUrl, toUserMessage } from "../api";
 import type { PollState } from "../hooks/usePolling";
 
 interface Props {
   settings: ConnectionSettings;
   health: PollState<HealthResponse>;
   onApply: (settings: ConnectionSettings) => void;
+  /** 需要鉴权接口的最近一次错误：/health 免鉴权，Token 错误只能从这里看出来。 */
+  probeError?: unknown;
 }
 
-export function ConnectionBar({ settings, health, onApply }: Props) {
+export function ConnectionBar({ settings, health, onApply, probeError }: Props) {
   const [draftUrl, setDraftUrl] = useState(settings.baseUrl);
   const [draftToken, setDraftToken] = useState(settings.token);
   const [showToken, setShowToken] = useState(false);
@@ -27,9 +29,19 @@ export function ConnectionBar({ settings, health, onApply }: Props) {
   let pillText = "未配置 Token";
   let pillTitle = "在下方填写与后端 CEF_TOKEN 一致的 Token";
   if (settings.token) {
-    if (health.error) {
+    const unauthorized = probeError instanceof CefApiError && probeError.kind === "unauthorized";
+    const network = health.error instanceof CefApiError && health.error.kind === "network";
+    if (unauthorized) {
+      pillTone = "err";
+      pillText = "认证失败";
+      pillTitle = "Token 无效：鉴权接口返回 401";
+    } else if (network) {
       pillTone = "err";
       pillText = "连接失败";
+      pillTitle = toUserMessage(health.error).title;
+    } else if (health.error) {
+      pillTone = "warn";
+      pillText = "接口异常";
       pillTitle = toUserMessage(health.error).title;
     } else if (health.data) {
       pillTone = "ok";

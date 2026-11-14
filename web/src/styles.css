@@ -222,6 +222,12 @@ textarea {
   background: rgba(255, 107, 107, 0.08);
 }
 
+.health-pill--warn {
+  color: #ffd18a;
+  border-color: rgba(242, 182, 74, 0.35);
+  background: rgba(242, 182, 74, 0.08);
+}
+
 /* --------------------------------- 统计条 -------------------------------- */
 
 .stats-strip {
@@ -232,7 +238,7 @@ textarea {
 
 .stats-cards {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -524,6 +530,10 @@ textarea {
 
 .dot--idle {
   background: #4a5b70;
+}
+
+.dot--warn {
+  background: var(--warn);
 }
 
 .worker-meta {

@@ -1,19 +1,15 @@
 import { useState } from "react";
 import type { JobState, JobSummary } from "../api";
 import type { PollState } from "../hooks/usePolling";
-import {
-  formatEta,
-  formatNumber,
-  formatUnix,
-  jobProgress,
-  JOB_STATE_LABELS,
-} from "../format";
+import { formatNumber, formatUnix, jobProgress, JOB_STATE_LABELS } from "../format";
 import { EmptyBox, ErrorBox, LoadingLine, Section, StateBadge, UpdatedInfo } from "./ui";
 
 interface Props {
   jobs: PollState<JobSummary[]>;
   onOpen: (jobId: string) => void;
   onRefresh: () => void;
+  /** 页面顶部已有全局错误横幅时，不再重复渲染同一条错误。 */
+  hideError?: boolean;
 }
 
 const FILTER_OPTIONS: Array<{ value: JobState | "all"; label: string }> = [
@@ -26,7 +22,7 @@ const FILTER_OPTIONS: Array<{ value: JobState | "all"; label: string }> = [
   { value: "canceled", label: JOB_STATE_LABELS.canceled },
 ];
 
-export function JobList({ jobs, onOpen, onRefresh }: Props) {
+export function JobList({ jobs, onOpen, onRefresh, hideError = false }: Props) {
   const [filter, setFilter] = useState<JobState | "all">("all");
   const all = jobs.data ?? [];
   const list = all
@@ -62,11 +58,16 @@ export function JobList({ jobs, onOpen, onRefresh }: Props) {
         </>
       }
     >
-      {jobs.error ? <ErrorBox error={jobs.error} onRetry={onRefresh} compact={Boolean(jobs.data)} /> : null}
+      {jobs.error && !hideError ? (
+        <ErrorBox error={jobs.error} onRetry={onRefresh} compact={Boolean(jobs.data)} />
+      ) : null}
 
       {!jobs.data && jobs.loading ? <LoadingLine text="正在读取任务列表…" /> : null}
       {!jobs.data && !jobs.loading && !jobs.error ? (
         <EmptyBox title="暂无任务数据" hint="Coordinator 返回的空列表，或任务接口尚未就绪。" />
+      ) : null}
+      {!jobs.data && jobs.error && hideError ? (
+        <EmptyBox title="任务列表暂不可用" hint="原因见页面顶部提示；修复后会自动恢复轮询。" />
       ) : null}
       {jobs.data && all.length === 0 ? (
         <EmptyBox
@@ -93,7 +94,7 @@ export function JobList({ jobs, onOpen, onRefresh }: Props) {
                 <th>进度</th>
                 <th className="num">成功 / 失败</th>
                 <th>创建时间</th>
-                <th className="num">预计剩余</th>
+                <th>完成时间</th>
                 <th aria-label="操作" />
               </tr>
             </thead>
@@ -138,7 +139,7 @@ export function JobList({ jobs, onOpen, onRefresh }: Props) {
                       {formatNumber(job.succeeded)} / {formatNumber(job.failed)}
                     </td>
                     <td className="nowrap">{formatUnix(job.created_at)}</td>
-                    <td className="num nowrap">{formatEta(job.eta_s)}</td>
+                    <td className="nowrap">{formatUnix(job.finished_at)}</td>
                     <td>
                       <button
                         type="button"

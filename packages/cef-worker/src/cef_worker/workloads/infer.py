@@ -23,6 +23,35 @@ _SESSION_CACHE: dict[tuple[str, str], Any] = {}
 _MODEL_HASH_CACHE: dict[tuple[str, float, int], dict[str, Any]] = {}
 
 
+_ENGINE_CACHE: dict[tuple[str, float, int], str] = {}
+
+
+def _effective_engine(model_dir: Path) -> str:
+    """Open a real session once per model file and report the provider it got."""
+    import onnxruntime as ort
+
+    candidates = list(model_dir.glob("*.onnx"))
+    if not candidates:
+        return "cpu"
+    path = candidates[0]
+    try:
+        stat = path.stat()
+    except OSError:
+        return "cpu"
+    key = (str(path), stat.st_mtime, stat.st_size)
+    cached = _ENGINE_CACHE.get(key)
+    if cached:
+        return cached
+    try:
+        providers = [p for p in ("CUDAExecutionProvider", "CPUExecutionProvider") if p in ort.get_available_providers()]
+        sess = ort.InferenceSession(str(path), providers=providers or None)
+        engine = "cuda" if "CUDAExecutionProvider" in sess.get_providers() else "cpu"
+    except Exception:  # noqa: BLE001
+        engine = "cpu"
+    _ENGINE_CACHE[key] = engine
+    return engine
+
+
 def _model_ref(path: Path) -> dict[str, Any]:
     import hashlib
 
@@ -76,8 +105,12 @@ class InferWorkload(Workload):
                 "reason": f"onnxruntime/numpy missing ({exc}); pip install 'cef-worker[infer]'",
             }
         models = [_model_ref(p) for p in sorted(self.model_dir.glob("*.onnx"))]
-        providers = ort.get_available_providers()
-        engine = "cuda" if "CUDAExecutionProvider" in providers else "cpu"
+        # "CUDAExecutionProvider is importable" is not the same as "this model runs
+        # on the GPU": ORT silently falls back to CPU when the CUDA runtime is
+        # incomplete. Report the provider the session actually ends up with.
+        engine = _effective_engine(self.model_dir) if models else (
+            "cuda" if "CUDAExecutionProvider" in ort.get_available_providers() else "cpu"
+        )
         if not models:
             return {
                 "kind": self.kind,

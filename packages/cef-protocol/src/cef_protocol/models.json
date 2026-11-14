@@ -7,16 +7,10 @@
       "file": "yolo11n.onnx",
       "sha256": "b1a053916c9d667d05a53bfb43764a0aabb11dee20795af75b8ce408760685d3",
       "status": "required",
-      "source": "由 B 导出并校验（Ultralytics YOLO11n, imgsz=640）",
-      "note": "对照实验唯一允许的权重指纹；sha 不符的设备不会被派发 requires 该模型的任务"
+      "source": "https://huggingface.co/unileon-robotics/YOLO11-ONNX/resolve/0e2a3f195ae62a25bc038ee9665b8e4ac5b98793/dynamic/yolo11n.onnx",
+      "note": "与 deploy/gpu_worker.py 的 MODEL_URL/MODEL_SHA256 一致；下载后必须校验 sha 再放进 ~/.cef/models/",
+      "check_command": "curl -sL <url> -o ~/.cef/models/yolo11n.onnx && sha256sum ~/.cef/models/yolo11n.onnx"
     },
-    {
-      "name": "yolo11n-hf",
-      "file": "yolo11n-hf.onnx",
-      "sha256": "7d8fd1717d9d5bbab6986cd134afb620649c7a394303d55b1e09fc00804cc5c1",
-      "status": "unverified",
-      "source": "HuggingFace webnn/yolo11n（我临时下载的，仅用于验证推理链路，禁止用于对照实验）",
-      "note": "与 required 权重不是同一份字节，结果不可与其他设备对比"
-    }
+    null
   ]
 }

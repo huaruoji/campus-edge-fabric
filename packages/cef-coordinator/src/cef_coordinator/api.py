@@ -320,6 +320,7 @@ def get_job(request: Request, job_id: str, tasks_limit: int = Query(500, ge=0, l
             required_tag=job["required_tag"],
             params=job_params,
             required_model_sha=job["required_model_sha"] if "required_model_sha" in job.keys() else None,
+            blocked_reason=_blocked_reason(conn, job, counts),
             params_text=describe_job(job["workload"], job_params),
             input_summary=_input_summary(inputs),
             submitter=job["submitter"],
@@ -1385,4 +1386,26 @@ def compat(request: Request) -> Compat:
         min_worker_version=request.app.state.version,
         update_command="cef-worker update",
         upgrade_notes="更新会执行 git pull + uv sync --inexact（保留手工装过的包，比如 onnxruntime-gpu），然后需要重启 worker",
+    )
+
+
+def _blocked_reason(conn: sqlite3.Connection, job: sqlite3.Row, counts: dict[str, int]) -> str | None:
+    """A queued job that cannot possibly start should say why, not just sit there."""
+    if counts["queued"] == 0 or counts["succeeded"] or counts["failed"]:
+        return None
+    required = job["required_model_sha"] if "required_model_sha" in job.keys() else None
+    if not required:
+        return None
+    holders = 0
+    for row in db.rows(conn, "SELECT workloads FROM workers WHERE state != 'offline'"):
+        for support in json.loads(row["workloads"] or "[]"):
+            for model in support.get("models") or []:
+                if model.get("sha256") == required:
+                    holders += 1
+    if holders:
+        return None
+    return (
+        f"没有在线设备持有模型 sha {required[:12]}…（清单要求）。"
+        f"把对应 .onnx 放到设备的 ~/.cef/models/ 后重启 worker；"
+        f"设备当前持有的模型可在设备面板查看。"
     )

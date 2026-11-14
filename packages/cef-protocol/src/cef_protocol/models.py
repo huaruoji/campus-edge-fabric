@@ -95,6 +95,8 @@ class JobSummary(_Model):
 
 class JobDetail(JobSummary):
     required_model_sha: str | None = None
+    #: why a queued job cannot start (e.g. no device holds the required weights)
+    blocked_reason: str | None = None
     eta_s: float | None = None
     params_text: str = ""
     input_summary: str = ""

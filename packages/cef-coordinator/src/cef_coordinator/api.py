@@ -24,6 +24,9 @@ from cef_protocol.models import (
     ChatList,
     CompleteMeta,
     CompleteResponse,
+    DatasetDetail,
+    DatasetList,
+    DatasetSummary,
     DrainResponse,
     FailRequest,
     FailResponse,
@@ -160,21 +163,23 @@ async def create_job(
             )
         used_bytes += size
 
-    if job_spec.workload == "blender":
+    refs: list[dict[str, Any]] = []
+
+    if job_spec.dataset:
+        if files:
+            raise _err(400, "invalid_params", "dataset 与直接上传文件不能同时使用")
+        refs = _dataset_files(s, job_spec.dataset)
+        if not refs:
+            raise _err(400, "invalid_params", f"数据集 {job_spec.dataset} 没有任何文件")
+    elif job_spec.workload == "blender":
         if len(files) != 1:
             raise _err(400, "invalid_params", "blender jobs need exactly one .blend file")
-        try:
-            frames = parse_frames(params["frames"])
-        except InvalidParams as exc:
-            raise _err(400, "invalid_params", str(exc)) from exc
         if files[0].size is not None:
             _guard(files[0].size)
         sha, name, size, mime = await _spool(files[0], bs)
         _guard(size)
         stored.append((sha, name, size, mime))
-        ref = {"sha256": sha, "name": name, "size": size}
-        for i, frame in enumerate(frames):
-            tasks.append((i, {**params, "frame": frame}, [ref]))
+        refs = [{"sha256": sha, "name": name, "size": size}]
     else:
         if not files:
             raise _err(400, "invalid_params", f"workload {job_spec.workload} needs at least one input file")
@@ -188,7 +193,20 @@ async def create_job(
             stored.append((sha, name, size, mime))
             if job_spec.inputs:
                 name = job_spec.inputs[i].name or name
-            tasks.append((i, params, [{"sha256": sha, "name": name, "size": size}]))
+            refs.append({"sha256": sha, "name": name, "size": size})
+
+    if job_spec.workload == "blender":
+        if len(refs) != 1:
+            raise _err(400, "invalid_params", "blender jobs need exactly one .blend file")
+        try:
+            frames = parse_frames(params["frames"])
+        except InvalidParams as exc:
+            raise _err(400, "invalid_params", str(exc)) from exc
+        for i, frame in enumerate(frames):
+            tasks.append((i, {**params, "frame": frame}, [refs[0]]))
+    else:
+        for i, ref in enumerate(refs):
+            tasks.append((i, params, [ref]))
 
     job_id = new_id("job")
     now = time.time()
@@ -1079,4 +1097,152 @@ def chat_delete_message(request: Request, message_id: str) -> Response:
         removed = conn.execute("DELETE FROM chat_messages WHERE id=?", (message_id,)).rowcount
     if not removed:
         raise _err(404, "not_found", f"message {message_id} not found")
+    return Response(status_code=204)
+
+
+# ------------------------------------------------------------------- datasets
+def _dataset_row(conn: sqlite3.Connection, ref: str) -> sqlite3.Row | None:
+    return db.one(conn, "SELECT * FROM datasets WHERE id=? OR name=?", (ref, ref))
+
+
+def _dataset_files(s, ref: str) -> list[dict[str, Any]]:
+    """Files of a registered dataset, verified against the blob store."""
+    conn = db.reading(s.db_path)
+    try:
+        row = _dataset_row(conn, ref)
+    finally:
+        conn.close()
+    if row is None:
+        raise _err(404, "not_found", f"数据集 {ref} 不存在（先 cef dataset add）")
+    files = json.loads(row["files"] or "[]")
+    blob_store = store.BlobStore(s.blob_dir)
+    missing = [f.get("name") or f["sha256"][:8] for f in files if not blob_store.exists(f["sha256"])]
+    if missing:
+        raise _err(
+            409,
+            "dataset_incomplete",
+            f"数据集 {ref} 引用的 {len(missing)} 个文件已被 GC 清理（例如 {missing[0]}），请重新 add",
+        )
+    return files
+
+
+def _dataset_summary(row: sqlite3.Row) -> DatasetSummary:
+    files = json.loads(row["files"] or "[]")
+    return DatasetSummary(
+        id=row["id"],
+        name=row["name"],
+        description=row["description"],
+        count=len(files),
+        bytes=sum(int(f.get("size") or 0) for f in files),
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
+
+
+@router.post("/datasets", status_code=201, response_model=DatasetDetail)
+async def create_dataset(
+    request: Request,
+    name: Annotated[str, Form()],
+    description: Annotated[str, Form()] = "",
+    manifest: Annotated[str, Form()] = "",
+    files: Annotated[list[UploadFile], File()] = [],  # noqa: B006
+) -> DatasetDetail:
+    """Register a dataset once; jobs then reference it by name instead of uploading.
+
+    Two ways to fill it: upload the files here, or pass a manifest of sha256 that
+    already exist in the blob store (so re-importing a dataset costs no traffic).
+    """
+    s = settings_of(request)
+    bs = blobs_of(request)
+    clean_name = name.strip().lower().replace(" ", "-")[:48]
+    if not clean_name:
+        raise _err(400, "invalid_params", "数据集需要一个名字")
+
+    entries: list[dict[str, Any]] = []
+    stored: list[tuple[str, str, int, str | None]] = []
+    if manifest:
+        try:
+            raw = json.loads(manifest)
+        except ValueError as exc:
+            raise _err(400, "invalid_params", f"manifest 不是合法 JSON: {exc}") from exc
+        for item in raw:
+            sha = str(item.get("sha256") or "")
+            if not sha:
+                continue
+            entries.append({"sha256": sha, "name": str(item.get("name") or sha[:8]), "size": int(item.get("size") or 0)})
+    for upload in files:
+        sha, fname, size, mime = await _spool(upload, bs)
+        stored.append((sha, fname, size, mime))
+        entries.append({"sha256": sha, "name": fname, "size": size})
+
+    if not entries:
+        raise _err(400, "invalid_params", "数据集为空：请上传文件或在 manifest 里给 sha256")
+
+    # dataset order matters (it becomes task order), but duplicates do not
+    seen: set[tuple[str, str]] = set()
+    unique: list[dict[str, Any]] = []
+    for entry in entries:
+        key = (entry["sha256"], entry["name"])
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(entry)
+
+    now = time.time()
+    dataset_id = new_id("ds")
+    with db.transaction(s.db_path) as conn:
+        _blob_rows(conn, stored)
+        existing = _dataset_row(conn, clean_name)
+        if existing is not None:
+            conn.execute(
+                "UPDATE datasets SET description=?, files=?, updated_at=? WHERE id=?",
+                (description or existing["description"], json.dumps(unique), now, existing["id"]),
+            )
+            dataset_id = existing["id"]
+        else:
+            conn.execute(
+                "INSERT INTO datasets (id,name,description,files,created_at,updated_at) VALUES (?,?,?,?,?,?)",
+                (dataset_id, clean_name, description, json.dumps(unique), now, now),
+            )
+        row = db.one(conn, "SELECT * FROM datasets WHERE id=?", (dataset_id,))
+
+    detail = DatasetDetail(**_dataset_summary(row).model_dump())
+    detail.files = [_blob_brief(f) for f in unique]
+    return detail
+
+
+@router.get("/datasets", response_model=DatasetList)
+def list_datasets(request: Request) -> DatasetList:
+    s = settings_of(request)
+    conn = db.reading(s.db_path)
+    try:
+        rows = db.rows(conn, "SELECT * FROM datasets ORDER BY updated_at DESC")
+    finally:
+        conn.close()
+    return DatasetList(datasets=[_dataset_summary(r) for r in rows])
+
+
+@router.get("/datasets/{ref}", response_model=DatasetDetail)
+def get_dataset(request: Request, ref: str) -> DatasetDetail:
+    s = settings_of(request)
+    conn = db.reading(s.db_path)
+    try:
+        row = _dataset_row(conn, ref)
+    finally:
+        conn.close()
+    if row is None:
+        raise _err(404, "not_found", f"数据集 {ref} 不存在")
+    detail = DatasetDetail(**_dataset_summary(row).model_dump())
+    detail.files = [_blob_brief(f) for f in json.loads(row["files"] or "[]")]
+    return detail
+
+
+@router.delete("/datasets/{ref}", status_code=204)
+def delete_dataset(request: Request, ref: str) -> Response:
+    s = settings_of(request)
+    with db.transaction(s.db_path) as conn:
+        row = _dataset_row(conn, ref)
+        if row is None:
+            raise _err(404, "not_found", f"数据集 {ref} 不存在")
+        conn.execute("DELETE FROM datasets WHERE id=?", (row["id"],))
     return Response(status_code=204)

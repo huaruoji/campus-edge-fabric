@@ -41,6 +41,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true", help="machine-readable output")
     sub = p.add_subparsers(dest="cmd", required=True)
 
+    ds = sub.add_parser("dataset", help="register / list datasets (no per-run uploads)")
+    dsub = ds.add_subparsers(dest="dcmd", required=True)
+    dadd = dsub.add_parser("add", help="upload a directory or file list as a named dataset")
+    dadd.add_argument("--name", required=True)
+    dadd.add_argument("--description", default="")
+    dadd.add_argument("paths", nargs="+")
+    dsub.add_parser("ls", help="list datasets")
+    dshow = dsub.add_parser("show", help="show one dataset")
+    dshow.add_argument("ref")
+    drm = dsub.add_parser("rm", help="delete a dataset registration (blobs stay for GC)")
+    drm.add_argument("ref")
+
     sub.add_parser("doctor", help="health check + registered workloads")
     sub.add_parser("mcp", help="run as an MCP server over stdio (Claude Code / Codex / any MCP client)")
     sub.add_parser("workers", help="list devices")
@@ -62,6 +74,7 @@ def build_parser() -> argparse.ArgumentParser:
     submit.add_argument("--name", default=None)
     submit.add_argument("--priority", type=int, default=0)
     submit.add_argument("--required-tag", default=None, help="pin to devices with this tag")
+    submit.add_argument("--dataset", default=None, help="dataset name/id; then no files are uploaded")
     submit.add_argument("files", nargs="*", help="input files or globs")
 
     ls = jsub.add_parser("ls", help="list jobs")
@@ -161,10 +174,11 @@ def cmd_job(c: CefClient, args: argparse.Namespace) -> int:
             print("error: --workload or a spec file with 'workload' is required", file=sys.stderr)
             return 2
         params = json.loads(args.params) if args.params else dict(spec.get("params") or {})
+        dataset = args.dataset or spec.get("dataset")
         raw_files = args.files or spec.get("files") or []
-        paths = _expand(raw_files)
-        if not paths:
-            print("error: no input files", file=sys.stderr)
+        paths = _expand(raw_files) if raw_files else []
+        if not paths and not dataset:
+            print("error: 需要输入文件，或用 --dataset 引用已登记的数据集", file=sys.stderr)
             return 2
         created = c.submit_job(
             paths,
@@ -173,6 +187,7 @@ def cmd_job(c: CefClient, args: argparse.Namespace) -> int:
             name=args.name or spec.get("name"),
             priority=args.priority or int(spec.get("priority") or 0),
             required_tag=args.required_tag or spec.get("required_tag"),
+            dataset=dataset,
         )
         if args.json:
             print(created.model_dump_json())
@@ -228,6 +243,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_workloads(client, args)
         if args.cmd == "job":
             return cmd_job(client, args)
+        if args.cmd == "dataset":
+            return cmd_dataset(client, args)
         if args.cmd == "mcp":
             from .mcp_server import run as run_mcp
 
@@ -243,3 +260,36 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def cmd_dataset(c: CefClient, args: argparse.Namespace) -> int:
+    if args.dcmd == "add":
+        paths = _expand(args.paths)
+        if not paths:
+            print("error: 没有匹配到任何文件", file=sys.stderr)
+            return 2
+        detail = c.create_dataset(args.name, paths, args.description)
+        print(f"数据集 {detail['name']} 已登记：{len(detail.get('files', []))} 个文件，"
+              f"{detail.get('bytes', 0) / 1e6:.1f} MB")
+        return 0
+    if args.dcmd == "ls":
+        items = c.list_datasets()
+        if not items:
+            print("还没有数据集。用 cef dataset add ./dir --name xxx 登记。")
+            return 0
+        for item in items:
+            print(f"{item['name']:<24}{item['count']:>6} 个文件 {item['bytes'] / 1e6:>8.1f} MB  {item.get('description') or ''}")
+        return 0
+    if args.dcmd == "show":
+        detail = c.get_dataset(args.ref)
+        print(f"{detail['name']}  {detail['count']} 个文件  {detail['bytes'] / 1e6:.1f} MB")
+        for f in detail["files"][:10]:
+            print(f"  {f['name']:<40}{f['size']:>10} B  {f['sha256'][:12]}")
+        if detail["count"] > 10:
+            print(f"  … 其余 {detail['count'] - 10} 个")
+        return 0
+    if args.dcmd == "rm":
+        c.delete_dataset(args.ref)
+        print(f"已删除数据集 {args.ref}（blob 由 GC 回收）")
+        return 0
+    return 2

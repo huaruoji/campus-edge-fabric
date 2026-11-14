@@ -108,6 +108,15 @@ CREATE TABLE IF NOT EXISTS blobs (
   created_at REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS datasets (
+  id          TEXT PRIMARY KEY,
+  name        TEXT UNIQUE NOT NULL,
+  description TEXT,
+  files       TEXT NOT NULL,
+  created_at  REAL NOT NULL,
+  updated_at  REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS chat_messages (
   id         TEXT PRIMARY KEY,
   room       TEXT NOT NULL DEFAULT 'pool',

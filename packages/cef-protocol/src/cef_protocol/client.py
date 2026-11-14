@@ -112,6 +112,40 @@ class CefClient:
         return JobDetail.model_validate(self.request("GET", f"{API}/jobs/{job_id}").json())
 
     # ------------------------------------------------------------------- actions
+    # ------------------------------------------------------------------ datasets
+    def create_dataset(
+        self,
+        name: str,
+        files: Sequence[Path | str],
+        description: str = "",
+    ) -> dict[str, Any]:
+        paths = [Path(f) for f in files]
+        handles = []
+        try:
+            for p in paths:
+                handles.append(("files", (p.name, p.open("rb"))))
+            resp = self._client.post(
+                f"{API}/datasets",
+                data={"name": name, "description": description},
+                files=handles,
+                headers=self._headers(),
+                timeout=600.0,
+            )
+            self._raise(resp)
+            return resp.json()
+        finally:
+            for _, (_, fh) in handles:
+                fh.close()
+
+    def list_datasets(self) -> list[dict[str, Any]]:
+        return self.request("GET", f"{API}/datasets").json().get("datasets", [])
+
+    def get_dataset(self, ref: str) -> dict[str, Any]:
+        return self.request("GET", f"{API}/datasets/{ref}").json()
+
+    def delete_dataset(self, ref: str) -> None:
+        self.request("DELETE", f"{API}/datasets/{ref}")
+
     def submit_job(
         self,
         files: Sequence[Path | str],
@@ -121,6 +155,7 @@ class CefClient:
         priority: int = 0,
         required_tag: str | None = None,
         extra_spec: dict[str, Any] | None = None,
+        dataset: str | None = None,
     ) -> JobCreated:
         paths = [Path(f) for f in files]
         spec: dict[str, Any] = {
@@ -131,6 +166,7 @@ class CefClient:
             "priority": priority,
             "required_tag": required_tag,
             "inputs": [{"name": p.name} for p in paths],
+            "dataset": dataset,
         }
         if extra_spec:
             spec.update(extra_spec)

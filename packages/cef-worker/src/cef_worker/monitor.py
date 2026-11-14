@@ -29,9 +29,28 @@ class Sample:
     disk_total_gb: float | None = None
 
 
+#: WSL2 exposes the Windows driver through a shim that is NOT on PATH
+NVIDIA_CANDIDATES = (
+    "/usr/lib/wsl/lib/nvidia-smi",
+    "/usr/bin/nvidia-smi",
+    "/usr/local/bin/nvidia-smi",
+    "/opt/nvidia/bin/nvidia-smi",
+)
+
+
+def find_nvidia_smi() -> str | None:
+    found = shutil.which("nvidia-smi")
+    if found:
+        return found
+    for candidate in NVIDIA_CANDIDATES:
+        if Path(candidate).exists():
+            return candidate
+    return None
+
+
 class ResourceMonitor:
     def __init__(self, data_dir: Path | None = None) -> None:
-        self._nvidia = shutil.which("nvidia-smi")
+        self._nvidia = find_nvidia_smi()
         self._primed = False
         # disk is measured on the volume that actually holds task scratch space
         self._data_dir = data_dir or Path.home() / ".cef" / "worker"

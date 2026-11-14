@@ -31,6 +31,8 @@ class JobSpec(_Model):
     params: dict[str, Any] = Field(default_factory=dict)
     name: str | None = None
     submitter: str | None = None
+    #: name or id of a registered dataset; when set, no files need uploading
+    dataset: str | None = None
     priority: int = 0
     required_tag: str | None = None
     inputs: list[InputSpec] = Field(default_factory=list)
@@ -371,6 +373,24 @@ class AgentChatResponse(_Model):
     usage: dict[str, Any] | None = None
     user_message_id: str | None = None
     assistant_message_id: str | None = None
+
+
+class DatasetSummary(_Model):
+    id: str
+    name: str
+    description: str | None = None
+    count: int = 0
+    bytes: int = 0
+    created_at: float = 0.0
+    updated_at: float = 0.0
+
+
+class DatasetDetail(DatasetSummary):
+    files: list[BlobBrief] = Field(default_factory=list)
+
+
+class DatasetList(_Model):
+    datasets: list[DatasetSummary] = Field(default_factory=list)
 
 
 class ChatEntry(_Model):

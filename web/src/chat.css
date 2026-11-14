@@ -208,11 +208,73 @@
 }
 
 .job-chat-files,
-.job-chat-tag {
+.job-chat-tag,
+.job-chat-dataset {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+}
+
+/* 数据来源二选一：数据集 / 上传文件 */
+.data-source {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.data-source legend {
+  padding: 0;
+}
+
+.data-source-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.data-source-option {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.data-source-option input {
+  accent-color: var(--accent);
+}
+
+.data-source-option input:disabled + * {
+  color: var(--text-muted);
+}
+
+.job-chat-preview-submit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  margin-block-start: 8px;
+  padding-block-start: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.job-chat-preview-source {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.job-chat-preview-submit a {
+  margin: 0;
+  color: var(--accent);
+  font-size: 13px;
 }
 
 .job-chat-transcript {
@@ -791,9 +853,195 @@
   justify-content: space-between;
 }
 
+/* --------------------------- 设备能力矩阵与远程配置 -------------------------- */
+
+.worker-capabilities {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-subtle);
+}
+
+.worker-capabilities-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.worker-capabilities-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.capability-wrap {
+  overflow-x: auto;
+}
+
+.capability-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.capability-table th {
+  padding: 0 8px 4px 0;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-align: start;
+  white-space: nowrap;
+}
+
+.capability-table td {
+  padding: 4px 8px 4px 0;
+  border-top: 1px solid var(--border);
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.capability-table .mono {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.capability-row--missing td {
+  background: var(--warn-soft);
+}
+
+.capability-model {
+  max-width: 16rem;
+}
+
+.worker-missing {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-inline-start: 16px;
+  color: var(--warn);
+  font-size: 12px;
+}
+
+.provision-panel {
+  display: grid;
+  gap: 8px;
+  margin-block-start: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-subtle);
+}
+
+.provision-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.provision-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.provision-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.provision-check {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.provision-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.provision-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.provision-hint--err {
+  color: var(--err);
+}
+
+.provision-error {
+  display: grid;
+  gap: 4px;
+}
+
+.provision-status {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.provision-status-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.provision-state {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.provision-state--queued {
+  color: var(--text-muted);
+}
+
+.provision-state--running {
+  color: var(--accent);
+}
+
+.provision-state--succeeded {
+  color: var(--ok);
+}
+
+.provision-state--failed {
+  color: var(--err);
+}
+
+.provision-log {
+  max-height: 12rem;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--gray-50);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
 /* -------------------------------- 焦点可见 -------------------------------- */
 
-.preset-card:focus-visible,
+.preset-main:focus-visible,
 .tag-chip:focus-visible,
 .job-chat-author--own:focus-visible,
 .worker-tag-more > summary:focus-visible {
@@ -804,5 +1052,12 @@
 @media (prefers-reduced-motion: reduce) {
   .preset-card {
     transition: none;
+  }
+}
+
+/* 能力矩阵在窄屏允许横向滚动（375px 也不挤出页面级滚动条）。 */
+@media (max-width: 640px) {
+  .capability-model {
+    max-width: none;
   }
 }

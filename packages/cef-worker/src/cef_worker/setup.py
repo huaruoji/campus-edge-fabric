@@ -58,8 +58,16 @@ def _providers() -> list[str]:
         return []
 
 
+def _installer_argv(package: str) -> list[str]:
+    """uv-managed venvs have no pip; prefer uv when it is what created this env."""
+    uv = shutil.which("uv") or str(Path.home() / ".local" / "bin" / "uv")
+    if Path(uv).exists():
+        return [uv, "pip", "install", "--python", sys.executable, package]
+    return [sys.executable, "-m", "pip", "install", "--quiet", package]
+
+
 def _pip_install(package: str) -> Step:
-    argv = [sys.executable, "-m", "pip", "install", "--quiet", package]
+    argv = _installer_argv(package)
     try:
         proc = subprocess.run(argv, capture_output=True, text=True, timeout=1800, check=False)
     except Exception as exc:  # noqa: BLE001
@@ -77,7 +85,7 @@ def _infer(model_dir: Path, dry_run: bool) -> RecipeResult:
         engine = "cuda" if "CUDAExecutionProvider" in _providers() else "cpu"
         result.steps.append(Step("onnxruntime", True, f"already installed (engine={engine})"))
     elif dry_run:
-        result.steps.append(Step("onnxruntime", False, "missing", f"{sys.executable} -m pip install {package}"))
+        result.steps.append(Step("onnxruntime", False, "missing", " ".join(_installer_argv(package))))
         result.ok = False
     else:
         result.steps.append(_pip_install(package))

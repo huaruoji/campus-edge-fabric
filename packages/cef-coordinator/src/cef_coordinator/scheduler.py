@@ -195,8 +195,21 @@ def claim(
     leases: list[Lease] = []
     with db.transaction(db_path) as conn:
         wl_marks = ",".join("?" * len(workloads))
+        # model bytes this worker actually holds: a job pinned to other weights is skipped
+        model_shas = [
+            str(m.get("sha256"))
+            for support in json.loads(worker["workloads"] or "[]")
+            for m in (support.get("models") or [])
+            if m.get("sha256")
+        ]
+        model_clause = "j.required_model_sha IS NULL OR j.required_model_sha=''"
+        model_args: list[Any] = []
+        if model_shas:
+            model_marks = ",".join("?" * len(model_shas))
+            model_clause += f" OR j.required_model_sha IN ({model_marks})"
+            model_args = list(dict.fromkeys(model_shas))
         tag_clause = "j.required_tag IS NULL OR j.required_tag=''"
-        args: list[Any] = [*workloads]
+        args: list[Any] = [*workloads, *model_args]
         if tags:
             tag_marks = ",".join("?" * len(tags))
             tag_clause += f" OR j.required_tag IN ({tag_marks})"
@@ -210,6 +223,7 @@ def claim(
                 WHERE t.state='queued'
                   AND j.state IN ('queued','running')
                   AND j.workload IN ({wl_marks})
+                  AND ({model_clause})
                   AND ({tag_clause})
                 ORDER BY j.priority DESC, j.created_at ASC, t.idx ASC
                 LIMIT ?""",

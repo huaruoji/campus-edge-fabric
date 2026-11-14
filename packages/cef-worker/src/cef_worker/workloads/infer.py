@@ -40,8 +40,18 @@ def _model_ref(path: Path) -> dict[str, Any]:
             for chunk in iter(lambda: fh.read(1 << 20), b""):
                 digest.update(chunk)
     except OSError:
-        return {"name": path.stem, "sha256": "", "size": stat.st_size}
-    ref = {"name": path.stem, "sha256": digest.hexdigest(), "size": stat.st_size}
+        return {"name": path.stem, "sha256": "", "size": stat.st_size, "verified": False}
+    from ..models import expected_sha
+
+    sha = digest.hexdigest()
+    want = expected_sha(path.stem)
+    ref = {
+        "name": path.stem,
+        "sha256": sha,
+        "size": stat.st_size,
+        # None = this model is not pinned by the manifest; False = wrong bytes
+        "verified": (sha == want) if want else None,
+    }
     _MODEL_HASH_CACHE[key] = ref
     return ref
 

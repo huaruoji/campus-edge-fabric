@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   state         TEXT NOT NULL,
   priority      INTEGER NOT NULL DEFAULT 0,
   required_tag  TEXT,
+  required_model_sha TEXT,
   submitter     TEXT,
   created_at    REAL NOT NULL,
   started_at    REAL,
@@ -194,6 +195,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "blobs": {
             "mime": "TEXT",
             "name": "TEXT",
+        },
+        "jobs": {
+            "required_model_sha": "TEXT",
         },
     }
     for table, columns in wanted.items():

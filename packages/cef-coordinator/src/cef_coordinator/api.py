@@ -221,6 +221,14 @@ async def create_job(
         for i, ref in enumerate(refs):
             tasks.append((i, params, [ref]))
 
+    # A comparison run is only meaningful on identical weights, so pin the manifest
+    # hash unless the caller explicitly asked for another model.
+    required_model_sha = job_spec.requires_model_sha
+    if not required_model_sha and job_spec.workload == "infer":
+        from cef_protocol.model_manifest import expected_sha
+
+        required_model_sha = expected_sha(str(params.get("model", "yolo11n")))
+
     job_id = new_id("job")
     now = time.time()
     # A job without a name is indistinguishable from any other ID on the dashboard.
@@ -230,8 +238,9 @@ async def create_job(
     with db.transaction(s.db_path) as conn:
         _blob_rows(conn, stored)
         conn.execute(
-            """INSERT INTO jobs (id,name,workload,params,state,priority,required_tag,submitter,created_at)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+            """INSERT INTO jobs (id,name,workload,params,state,priority,required_tag,required_model_sha,
+                                   submitter,created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (
                 job_id,
                 display_name,
@@ -240,6 +249,7 @@ async def create_job(
                 str(JobState.QUEUED),
                 int(job_spec.priority),
                 job_spec.required_tag,
+                required_model_sha,
                 job_spec.submitter,
                 now,
             ),
@@ -309,6 +319,7 @@ def get_job(request: Request, job_id: str, tasks_limit: int = Query(500, ge=0, l
             tasks=tasks,
             required_tag=job["required_tag"],
             params=job_params,
+            required_model_sha=job["required_model_sha"] if "required_model_sha" in job.keys() else None,
             params_text=describe_job(job["workload"], job_params),
             input_summary=_input_summary(inputs),
             submitter=job["submitter"],

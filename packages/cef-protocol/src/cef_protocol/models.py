@@ -33,6 +33,8 @@ class JobSpec(_Model):
     submitter: str | None = None
     #: name or id of a registered dataset; when set, no files need uploading
     dataset: str | None = None
+    #: sha256 of the model weights this job must run; devices holding other bytes are skipped
+    requires_model_sha: str | None = None
     priority: int = 0
     required_tag: str | None = None
     inputs: list[InputSpec] = Field(default_factory=list)
@@ -92,6 +94,7 @@ class JobSummary(_Model):
 
 
 class JobDetail(JobSummary):
+    required_model_sha: str | None = None
     eta_s: float | None = None
     params_text: str = ""
     input_summary: str = ""
@@ -111,6 +114,8 @@ class ModelRef(_Model):
     name: str
     sha256: str = ""
     size: int = 0
+    #: True = matches the repo-pinned manifest, False = wrong bytes, None = not pinned
+    verified: bool | None = None
 
 
 class WorkloadSupport(_Model):

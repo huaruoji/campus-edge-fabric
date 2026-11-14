@@ -384,6 +384,18 @@
           "default": 0,
           "title": "Size",
           "type": "integer"
+        },
+        "verified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Verified"
         }
       },
       "required": [

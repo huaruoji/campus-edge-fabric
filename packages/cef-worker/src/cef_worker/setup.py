@@ -49,6 +49,19 @@ def _python_has(module: str) -> bool:
     return importlib.util.find_spec(module) is not None
 
 
+def _file_sha(path: Path) -> str:
+    import hashlib
+
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                digest.update(chunk)
+    except OSError:
+        return ""
+    return digest.hexdigest()
+
+
 def _providers() -> list[str]:
     try:
         import onnxruntime as ort
@@ -91,19 +104,37 @@ def _infer(model_dir: Path, dry_run: bool) -> RecipeResult:
         result.steps.append(_pip_install(package))
         result.ok = all(step.ok for step in result.steps)
 
-    models = sorted(p.name for p in model_dir.glob("*.onnx")) if model_dir.is_dir() else []
-    if models:
-        result.steps.append(Step("models", True, ", ".join(models)))
-    else:
-        result.steps.append(
-            Step(
-                "models",
-                False,
-                f"no .onnx in {model_dir}",
-                "把 yolo11n.onnx 放进 " + str(model_dir),
-            )
-        )
+    # "an .onnx exists" is not enough: the controlled comparison needs the exact
+    # bytes the protocol fixed, so every required model is hash-checked here.
+    from .models import required_shas
+
+    required = required_shas()
+    if not required:
+        result.steps.append(Step("models", False, "manifest 里没有 required 模型", "检查 packages/cef-worker/models.json"))
         result.ok = False
+        return result
+
+    for name, want in required.items():
+        path = model_dir / f"{name}.onnx"
+        if not path.exists():
+            result.steps.append(
+                Step(f"model {name}", False, f"missing at {path}", f"把 {name}.onnx 放到 {model_dir}")
+            )
+            result.ok = False
+            continue
+        actual = _file_sha(path)
+        if actual == want:
+            result.steps.append(Step(f"model {name}", True, f"sha256 {actual[:16]}… matches manifest"))
+        else:
+            result.steps.append(
+                Step(
+                    f"model {name}",
+                    False,
+                    f"sha mismatch: manifest {want[:16]}… / on disk {actual[:16]}…",
+                    f"用协议里的那份覆盖 {path} 后重启 worker",
+                )
+            )
+            result.ok = False
     return result
 
 

@@ -121,9 +121,11 @@ class CudaInference(InferWorkload):
         )
         require_cuda(self.session)
 
-    def _session(self, model):
+    def _session(self, model, device="auto"):
         if model != "yolo11n":
             raise WorkloadError("GPU profile supports only the local yolo11n model", retryable=False)
+        if device == "cpu":
+            return super()._session(model, device="cpu")
         return self.session
 
 

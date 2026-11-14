@@ -144,6 +144,17 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 );
 CREATE INDEX IF NOT EXISTS idx_chat_room ON chat_messages(room, created_at);
 
+CREATE TABLE IF NOT EXISTS conversations (
+  id TEXT PRIMARY KEY, title TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0,
+  created_at REAL NOT NULL, updated_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS experiments (
+  id TEXT PRIMARY KEY, state TEXT NOT NULL, spec TEXT NOT NULL, report TEXT NOT NULL,
+  created_at REAL NOT NULL, updated_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS experiment_workers (
+  worker_id TEXT PRIMARY KEY, experiment_id TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS events (
   id        INTEGER PRIMARY KEY AUTOINCREMENT,
   ts        REAL NOT NULL,
@@ -176,6 +187,8 @@ def init_db(db_path: Path) -> None:
         with _WRITE_LOCK:
             conn.executescript(SCHEMA)
             _migrate(conn)
+            conn.execute("INSERT OR IGNORE INTO conversations VALUES ('pool', '团队历史对话', 0, 0, 0)")
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_job_message ON jobs(message_id) WHERE message_id IS NOT NULL")
     finally:
         conn.close()
 
@@ -196,8 +209,13 @@ def _migrate(conn: sqlite3.Connection) -> None:
             "mime": "TEXT",
             "name": "TEXT",
         },
+        "chat_messages": {"reply_to": "TEXT"},
         "jobs": {
             "required_model_sha": "TEXT",
+            "worker_ids": "TEXT",
+            "conversation_id": "TEXT",
+            "message_id": "TEXT",
+            "experiment_id": "TEXT",
         },
     }
     for table, columns in wanted.items():

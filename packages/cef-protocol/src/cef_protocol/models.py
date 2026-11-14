@@ -36,6 +36,9 @@ class JobSpec(_Model):
     #: sha256 of the model weights this job must run; devices holding other bytes are skipped
     requires_model_sha: str | None = None
     priority: int = 0
+    worker_ids: list[str] | None = None
+    conversation_id: str | None = None
+    message_id: str | None = None
     required_tag: str | None = None
     inputs: list[InputSpec] = Field(default_factory=list)
 
@@ -94,6 +97,9 @@ class JobSummary(_Model):
 
 
 class JobDetail(JobSummary):
+    worker_ids: list[str] | None = None
+    conversation_id: str | None = None
+    experiment_id: str | None = None
     required_model_sha: str | None = None
     #: why a queued job cannot start (e.g. no device holds the required weights)
     blocked_reason: str | None = None
@@ -391,6 +397,7 @@ class JobManifest(_Model):
 
 SORT_DESC = Literal["asc", "desc"]
 
+
 # ---------------------------------------------------------------- agent (chat)
 class ChatMessage(_Model):
     role: Literal["user", "assistant", "system"]
@@ -459,11 +466,29 @@ class DatasetList(_Model):
     datasets: list[DatasetSummary] = Field(default_factory=list)
 
 
+class ConversationCreate(_Model):
+    title: str = Field("新对话", min_length=1, max_length=80)
+
+
+class ConversationPatch(_Model):
+    title: str | None = Field(None, min_length=1, max_length=80)
+    archived: bool | None = None
+
+
+class ExperimentRequest(_Model):
+    dataset: str = Field(min_length=1)
+    worker_ids: list[str] = Field(min_length=2, max_length=8)
+    params: dict[str, Any] = Field(default_factory=dict)
+    repeats: int = Field(3, ge=1, le=5)
+    timeout_s: int = Field(900, ge=60, le=7200)
+
+
 class ChatEntry(_Model):
     """One persisted transcript line, shared by everyone holding the token."""
 
     id: str
     room: str = "pool"
+    reply_to: str | None = None
     role: Literal["user", "assistant"]
     author: str = ""
     content: str

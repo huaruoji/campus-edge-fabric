@@ -129,7 +129,7 @@ class InferWorkload(Workload):
             "models": models,
         }
 
-    def _session(self, model: str) -> Any:
+    def _session(self, model: str, device: str = "auto") -> Any:
         import onnxruntime as ort
 
         path = Path(model)
@@ -137,11 +137,21 @@ class InferWorkload(Workload):
             path = self.model_dir / f"{model}.onnx"
         if not path.exists():
             raise WorkloadError(f"model not found: {model} (looked in {self.model_dir})", retryable=False)
-        key = (str(path), ort.get_available_providers().__str__())
+        key = (str(path), device + ort.get_available_providers().__str__())
         if key not in _SESSION_CACHE:
             providers = [p for p in ("CUDAExecutionProvider", "CPUExecutionProvider") if p in ort.get_available_providers()]
+            if device != "auto":
+                wanted = "CPUExecutionProvider" if device == "cpu" else "CUDAExecutionProvider"
+                if wanted not in providers:
+                    raise WorkloadError(f"requested provider unavailable: {wanted}", retryable=False)
+                providers = [wanted]
             _SESSION_CACHE[key] = ort.InferenceSession(str(path), providers=providers or None)
-        return _SESSION_CACHE[key]
+        session = _SESSION_CACHE[key]
+        if device != "auto":
+            wanted = "CPUExecutionProvider" if device == "cpu" else "CUDAExecutionProvider"
+            if session.get_providers()[0] != wanted:
+                raise WorkloadError(f"provider fallback refused: {wanted}", retryable=False)
+        return session
 
     # -------------------------------------------------------------------- run
     def run(self, ctx: TaskContext) -> TaskResult:
@@ -156,7 +166,7 @@ class InferWorkload(Workload):
         max_det = int(ctx.params.get("max_det", 100))
 
         t0 = time.perf_counter()
-        sess = self._session(model)
+        sess = self._session(model, str(ctx.params.get("device", "auto")))
         src = ctx.inputs[0]
         try:
             with Image.open(src) as im:

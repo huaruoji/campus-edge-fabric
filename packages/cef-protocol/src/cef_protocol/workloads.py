@@ -9,7 +9,7 @@ the worker looks up its local adapter by the same `kind` string.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -33,6 +33,7 @@ class ThumbnailParams(BaseModel):
 class InferParams(BaseModel):
     """Object detection over images with a local ONNX model (CPU or CUDA EP)."""
 
+    device: Literal["auto", "cpu", "cuda"] = "auto"
     model: str = Field("yolo11n", description="model name resolved by the worker")
     imgsz: int = Field(640, ge=320, le=1280)
     conf: float = Field(0.25, ge=0.0, le=1.0)

@@ -69,10 +69,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        from starlette.requests import Request as LocalRequest
+
+        from .workspace import stop_jobs
+
+        local = LocalRequest({"type": "http", "app": app, "headers": []})
+        with db.transaction(settings.db_path) as conn:
+            interrupted = [r["id"] for r in db.rows(conn, "SELECT id FROM experiments WHERE state IN ('queued','running')")]
+            conn.execute("UPDATE experiments SET state='interrupted' WHERE state IN ('queued','running')")
+        for eid in interrupted:
+            stop_jobs(local, eid)
         task = asyncio.create_task(_maintenance(app))
         try:
             yield
         finally:
+            for running in list(app.state.experiment_tasks):
+                running.cancel()
+            if app.state.experiment_tasks:
+                await asyncio.gather(*list(app.state.experiment_tasks), return_exceptions=True)
             task.cancel()
             try:
                 await task
@@ -85,6 +99,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description="Personal devices as a distributed compute service — coordinator API v1",
         lifespan=lifespan,
     )
+    app.state.experiment_tasks = set()
     app.state.settings = settings
     app.state.blobs = BlobStore(settings.blob_dir)
     app.state.started_at = time.time()
@@ -93,12 +108,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.middleware("http")
     async def _auth(request: Request, call_next):  # type: ignore[no-untyped-def]
         path = request.url.path
-        if (
-            settings.token
-            and path.startswith("/api/v1")
-            and path not in ("/api/v1/health",)
-            and request.method != "OPTIONS"
-        ):
+        if settings.token and path.startswith("/api/v1") and path not in ("/api/v1/health",) and request.method != "OPTIONS":
             header = request.headers.get("authorization", "")
             supplied = header[7:] if header.lower().startswith("bearer ") else ""
             if not secrets.compare_digest(supplied, settings.token):
@@ -110,27 +120,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_error(request: Request, exc: StarletteHTTPException):
-        body = exc.detail if isinstance(exc.detail, dict) and "error" in exc.detail else {
-            "error": {"code": "http_error", "message": str(exc.detail)}
-        }
+        body = exc.detail if isinstance(exc.detail, dict) and "error" in exc.detail else {"error": {"code": "http_error", "message": str(exc.detail)}}
         return JSONResponse(body, status_code=exc.status_code, headers=exc.headers)
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(request: Request, exc: RequestValidationError):
-        return JSONResponse(
-            {"error": {"code": "invalid_params", "message": "request validation failed"}}, status_code=422
-        )
+        return JSONResponse({"error": {"code": "invalid_params", "message": "request validation failed"}}, status_code=422)
 
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception):  # type: ignore[no-untyped-def]
         if isinstance(exc, __import__("fastapi").HTTPException) and isinstance(exc.detail, dict):  # type: ignore[attr-defined]
             return JSONResponse(exc.detail, status_code=exc.status_code)  # type: ignore[attr-defined]
         log.exception("unhandled error on %s", request.url.path)
-        return JSONResponse(
-            ErrorResponse(error={"code": "internal", "message": str(exc)[:200]}).model_dump(), status_code=500
-        )
+        return JSONResponse(ErrorResponse(error={"code": "internal", "message": str(exc)[:200]}).model_dump(), status_code=500)
+
+    from .workspace import router as workspace_router
 
     app.include_router(api.router)
+    app.include_router(workspace_router)
 
     @app.get("/api/v1/dashboard", response_class=PlainTextResponse, include_in_schema=False)
     def dashboard_hint() -> str:

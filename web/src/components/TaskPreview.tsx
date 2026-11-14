@@ -4,7 +4,7 @@ import { workloadLabel } from "../presets";
 import { ErrorBox } from "./ui";
 
 /** 预览只描述计划；用户核对实际数据来源后，才上传文件并创建任务。 */
-export function TaskPreview({ api, preview, files, dataset, requiredTag, existingJobId, messageId }: {
+export function TaskPreview({ api, preview, files, dataset, requiredTag, existingJobId, messageId, workerIds, conversationId }: {
   api: ApiClient;
   preview: AgentPreview;
   files: File[];
@@ -12,6 +12,8 @@ export function TaskPreview({ api, preview, files, dataset, requiredTag, existin
   requiredTag: string;
   existingJobId: string | null;
   messageId?: string;
+  workerIds?: string[] | null;
+  conversationId?: string;
 }) {
   const [submitting, setSubmitting] = useState(false);
   const storageKey = messageId ? `cef.preview.job:${api.baseUrl}:${messageId}` : null;
@@ -29,7 +31,7 @@ export function TaskPreview({ api, preview, files, dataset, requiredTag, existin
   const invalidFiles = !datasetName && (files.length === 0 || (preview.workload === "blender" && files.length !== 1));
 
   async function submit(): Promise<void> {
-    if (pendingRef.current || jobId || invalidFiles || !api.hasToken) return;
+    if (pendingRef.current || jobId || invalidFiles || workerIds?.length === 0 || !api.hasToken) return;
     pendingRef.current = true;
     setSubmitting(true);
     setError(null);
@@ -37,6 +39,8 @@ export function TaskPreview({ api, preview, files, dataset, requiredTag, existin
       workload: preview.workload,
       params: preview.params,
       required_tag: requiredTag || null,
+      ...(workerIds !== undefined ? { worker_ids: workerIds } : {}),
+      ...(conversationId && messageId ? {conversation_id: conversationId, message_id: messageId} : {}),
       inputs: datasetName ? [] : files.map(({ name }) => ({ name })),
       ...(datasetName ? { dataset: datasetName } : {}),
     };
@@ -62,14 +66,14 @@ export function TaskPreview({ api, preview, files, dataset, requiredTag, existin
     <code className="job-chat-preview-params">{JSON.stringify(preview.params)}</code>
     {preview.note ? <p>{preview.note}</p> : null}
     {jobId ? <p role="status">已提交任务：<a href={"#/jobs/" + encodeURIComponent(jobId)}>查看新任务详情</a></p> : <>
-      <p>本次提交：{datasetName ? `数据集 ${datasetName}` : `当前所选 ${files.length} 个文件`}
-        {datasetName && count !== null ? `（${count} 个文件）` : ""}；设备标签：{requiredTag || "不限制"}。</p>
+      <p>本次提交：{datasetName ? `数据集 ${datasetName}` : conversationId ? "尚未选择数据集" : `当前所选 ${files.length} 个文件`}
+        {datasetName && count !== null ? `（${count} 个文件）` : ""}；参与设备：{workerIds ? `${workerIds.length} 台指定设备` : "自动选择兼容设备"}。</p>
       {!datasetName && files.length > 0 ? <p className="field-hint">{files.slice(0, 5).map((file) => file.name).join("、")}{files.length > 5 ? "…" : ""}</p> : null}
       {preview.workload !== "blender" && count !== null && preview.task_count !== null && count !== preview.task_count
         ? <p className="field-hint">实际输入为 {count} 个文件，任务数以本次输入为准。</p> : null}
-      {invalidFiles ? <p className="field-hint">{preview.workload === "blender" ? "请先上传一个 .blend 文件，或选择对应的数据集。" : "请先上传待处理文件，或选择已登记数据集。"}</p> : null}
+      {invalidFiles ? <p className="field-hint">{conversationId ? "请先选择已登记数据集。数据由本地 Agent 通过 CEF CLI 登记。" : preview.workload === "blender" ? "请先上传一个 .blend 文件，或选择对应的数据集。" : "请先上传待处理文件，或选择已登记数据集。"}</p> : null}
       {error ? <ErrorBox error={error} compact /> : null}
-      <button type="button" className="btn btn--sm btn--primary" disabled={submitting || invalidFiles || !api.hasToken} onClick={() => void submit()}>
+      <button type="button" className="btn btn--sm btn--primary" disabled={submitting || invalidFiles || workerIds?.length === 0 || !api.hasToken} onClick={() => void submit()}>
         {submitting ? "正在提交…" : "确认创建任务"}
       </button>
     </>}

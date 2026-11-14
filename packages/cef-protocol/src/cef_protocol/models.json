@@ -10,7 +10,6 @@
       "source": "https://huggingface.co/unileon-robotics/YOLO11-ONNX/resolve/0e2a3f195ae62a25bc038ee9665b8e4ac5b98793/dynamic/yolo11n.onnx",
       "note": "与 deploy/gpu_worker.py 的 MODEL_URL/MODEL_SHA256 一致；下载后必须校验 sha 再放进 ~/.cef/models/",
       "check_command": "curl -sL <url> -o ~/.cef/models/yolo11n.onnx && sha256sum ~/.cef/models/yolo11n.onnx"
-    },
-    null
+    }
   ]
 }

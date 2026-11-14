@@ -130,6 +130,10 @@ export interface JobTask {
 
 /** GET /api/v1/jobs/{job_id} 的完整响应。 */
 export interface JobDetail extends JobSummary {
+  worker_ids?: string[] | null;
+  conversation_id?: string | null;
+  experiment_id?: string | null;
+  blocked_reason?: string | null;
   /** 人类可读的参数描述，例如「长边 512px，WebP，质量 80」。 */
   params_text: string;
   /** 输入文件摘要，例如「16 张图片，共 3.2 MB」。 */
@@ -239,6 +243,9 @@ export interface ProvisionStatus {
 
 /** POST /api/v1/jobs 的 multipart 中的 spec 字段。 */
 export interface JobSpec {
+  worker_ids?: string[] | null;
+  conversation_id?: string;
+  message_id?: string;
   workload: string;
   params: Record<string, unknown>;
   name?: string;
@@ -370,6 +377,7 @@ export interface ListJobsOptions {
 }
 
 export interface ChatMessagesOptions {
+  before?: number;
   room?: string;
   /** created_at 浮点游标，只取严格更新的消息；不传则取最近 limit 条。 */
   after?: number | null;
@@ -706,6 +714,10 @@ function normalizeJobDetail(raw: unknown): JobDetail {
   const tasksRaw = Array.isArray(r.tasks) ? r.tasks : [];
   return {
     ...summary,
+    worker_ids: Array.isArray(r.worker_ids) ? asStringArray(r.worker_ids) : null,
+    conversation_id: asString(r.conversation_id) ?? null,
+    experiment_id: asString(r.experiment_id) ?? null,
+    blocked_reason: asString(r.blocked_reason) ?? null,
     params_text: asString(r.params_text) ?? "",
     input_summary: asString(r.input_summary) ?? "",
     submitter: asString(r.submitter) ?? null,
@@ -933,9 +945,37 @@ export function normalizeBaseUrl(raw: string): string {
   return value;
 }
 
+export interface Conversation {
+  id: string; title: string; archived: number; created_at: number; updated_at: number;
+}
+export interface ExperimentSpec {
+  dataset: string; worker_ids: string[]; params: Record<string, unknown>; repeats: number; timeout_s: number;
+}
+export interface ResourceSamples {
+  count: number; mean_cpu_pct: number | null; mean_gpu_pct: number | null;
+  samples: {ts: number; cpu_pct: number | null; gpu_pct: number | null}[];
+}
+export interface ExperimentPhase {
+  label: string; job_id: string; worker_ids: string[]; measured: boolean; state: string;
+  start?: number; end?: number; valid?: number; total?: number; seconds?: number; throughput?: number; retries?: number;
+  contribution?: Record<string, number>; resources?: Record<string, ResourceSamples>;
+}
+export interface Experiment {
+  id: string; state: string; created_at: number; updated_at: number; error?: string;
+  config: ExperimentSpec & {model_sha256: string; dataset_sha256: string; sampling_interval_s: number;
+    devices: {id: string; name: string; os: string; cpu_count: number; slots: number; max_batch: number; agent_version: string | null}[]};
+  phases: ExperimentPhase[]; warnings: string[];
+  metrics: {baselines: Record<string, number>; pool: number; eta_pct: number; speedup: number; unit: string} | null;
+}
 /* --------------------------------- 客户端 --------------------------------- */
 
 export interface ApiClient {
+  getConversations(signal?: AbortSignal): Promise<Conversation[]>;
+  createConversation(title: string): Promise<Conversation>;
+  patchConversation(id: string, patch: {title?: string; archived?: boolean}): Promise<Conversation>;
+  getExperiments(signal?: AbortSignal): Promise<Experiment[]>;
+  createExperiment(spec: ExperimentSpec): Promise<Experiment>;
+  cancelExperiment(id: string): Promise<Experiment>;
   readonly baseUrl: string;
   readonly hasToken: boolean;
   getHealth(signal?: AbortSignal): Promise<HealthResponse>;
@@ -1034,6 +1074,18 @@ export function createApiClient(baseUrlRaw: string, tokenRaw: string): ApiClient
   }
 
   return {
+    async getConversations(signal) {
+      const raw = await requestJson("/conversations", {method: "GET"}, signal) as {conversations: Conversation[]};
+      return raw.conversations;
+    },
+    async createConversation(title) { return await requestJson("/conversations", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({title})}) as Conversation; },
+    async patchConversation(id, patch) { return await requestJson("/conversations/" + encodeURIComponent(id), {method: "PATCH", headers: {"Content-Type": "application/json"}, body: JSON.stringify(patch)}) as Conversation; },
+    async getExperiments(signal) {
+      const raw = await requestJson("/experiments", {method: "GET"}, signal) as {experiments: Experiment[]};
+      return raw.experiments;
+    },
+    async createExperiment(spec) { return await requestJson("/experiments", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(spec)}) as Experiment; },
+    async cancelExperiment(id) { return await requestJson("/experiments/" + encodeURIComponent(id) + "/cancel", {method: "POST"}) as Experiment; },
     baseUrl,
     hasToken: token.length > 0,
 
@@ -1126,6 +1178,7 @@ export function createApiClient(baseUrlRaw: string, tokenRaw: string): ApiClient
       if (typeof options.after === "number" && Number.isFinite(options.after) && options.after > 0) {
         qs.set("after", String(options.after));
       }
+      if (options.before) qs.set("before", String(options.before));
       qs.set("limit", String(options.limit ?? 200));
       const raw = await requestJson("/chat/messages?" + qs.toString(), { method: "GET" }, signal);
       return normalizeChatPage(raw);

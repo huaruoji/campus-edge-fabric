@@ -1,5 +1,5 @@
 import { StrictMode } from "react";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApiClient, type ApiClient, type ProvisionStatus, type Worker } from "../src/api";
 import { TaskPreview } from "../src/components/TaskPreview";
@@ -18,6 +18,8 @@ const dataset = { id: "ds-1", name: "bsds-smoke", description: null, count: 16, 
 function client(overrides: Partial<ApiClient> = {}): ApiClient {
   return {
     ...createApiClient("http://localhost", "test-only"),
+    getConversations: vi.fn().mockResolvedValue([{id:"pool",title:"团队对话",archived:0,created_at:1,updated_at:1}]),
+    getWorkers: vi.fn().mockResolvedValue([{...worker, workloads:[{kind:"infer",available:true,version:"test",engine:"cuda",models:[]}]}]),
     getTags: vi.fn().mockResolvedValue([]),
     getWorkloads: vi.fn().mockResolvedValue([{ kind: "thumbnail", available_on: [worker.worker_id] }]),
     listDatasets: vi.fn().mockResolvedValue([dataset]),
@@ -107,25 +109,26 @@ describe("task confirmation", () => {
     await screen.findByRole("link", { name: "查看新任务详情" });
     expect(submitJob).toHaveBeenCalledTimes(2);
   });
-  it("selects registered preset data and sends context without auto-submitting", async () => {
-    const chat = vi.fn().mockResolvedValue({ reply: "preview", preview: { ...preview, dataset: dataset.name }, tool_trace: [] });
-    const submitJob = vi.fn().mockResolvedValue({ job_id: "job-integrated" });
-    const getTags = vi.fn().mockResolvedValue([{ tag: "bench-test", category: "free", total: 1, online: 1 }]);
-    render(<JobChat api={client({ chat, submitJob, getTags })} token="test-only" />);
-    await screen.findByRole("radio", { name: "已登记数据集" });
-    await waitFor(() => expect((screen.getByRole("button", { name: /BSDS300 冒烟 16 张/ }) as HTMLButtonElement).disabled).toBe(false));
-    fireEvent.click(screen.getByRole("button", { name: /BSDS300 冒烟 16 张/ }));
-    expect((screen.getByLabelText("选择数据集", { exact: true }) as HTMLSelectElement).value).toBe("bsds-smoke");
-    expect(chat).not.toHaveBeenCalled();
+  it("submits registered data and selected machines from a persistent conversation without file controls", async () => {
+    const messages: unknown[] = [];
+    const getChatMessages = vi.fn().mockImplementation(async () => ({messages:[...messages],latest:1}));
+    const chat = vi.fn().mockImplementation(async () => { messages.push({id:"msg-1",room:"pool",role:"assistant",author:"",content:"准备好了",preview:{...preview,dataset:dataset.name},job_id:null,trace:null,created_at:1}); return {reply:"准备好了",tool_trace:[]}; });
+    const submitJob = vi.fn().mockResolvedValue({job_id:"job-integrated"});
+    render(<JobChat api={client({chat,submitJob,getChatMessages})} token="test-only" />);
+    const input = await screen.findByRole("textbox",{name:"给算力助手发消息"});
+    expect(document.querySelector('input[type="file"]')).toBeNull();
+    fireEvent.change(screen.getByLabelText("使用的数据集"),{target:{value:dataset.name}});
+    fireEvent.change(input,{target:{value:"处理这些图片"}});
     expect(submitJob).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "发送", exact: true }));
-    await screen.findByRole("button", { name: "确认创建任务" });
-    expect(chat.mock.calls[0][0].context).toEqual({ files: [], dataset: "bsds-smoke" });
+    fireEvent.click(screen.getByRole("button",{name:"发送",exact:true}));
+    await screen.findByRole("button",{name:"确认创建任务"});
+    expect(chat.mock.calls[0][0]).toMatchObject({room:"pool",context:{dataset:dataset.name,files:[]}});
     expect(submitJob).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByLabelText("设备标签"), { target: { value: "bench-test" } });
-    fireEvent.click(screen.getByRole("button", { name: "确认创建任务" }));
-    await screen.findByRole("link", { name: "查看新任务详情" });
-    expect(submitJob).toHaveBeenCalledWith(expect.objectContaining({ dataset: "bsds-smoke", required_tag: "bench-test", inputs: [] }), []);
+    fireEvent.click(screen.getByLabelText("自动使用兼容设备"));
+    fireEvent.click(screen.getByRole("checkbox",{name:/Test worker/}));
+    fireEvent.click(screen.getByRole("button",{name:"确认创建任务"}));
+    await screen.findByRole("link",{name:"查看新任务详情"});
+    expect(submitJob).toHaveBeenCalledWith(expect.objectContaining({dataset:dataset.name,worker_ids:[worker.worker_id],conversation_id:"pool",message_id:"msg-1",inputs:[]}),[]);
   });
 });
 

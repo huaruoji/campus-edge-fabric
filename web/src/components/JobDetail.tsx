@@ -1,3 +1,4 @@
+import { DetectionPreview } from "./DetectionPreview";
 import { Fragment, useEffect, useState } from "react";
 import type { ApiClient, BlobBrief } from "../api";
 import { CefApiError, isAbortError } from "../api";
@@ -335,6 +336,11 @@ export function JobDetail({ api, jobId, onBack, connectionError }: Props) {
             </dl>
           </Section>
 
+          {job.blocked_reason ? <p className="notice notice--warn" role="status">{job.blocked_reason}</p> : null}
+          <div className="notice">
+            {job.experiment_id ? <a href={"#/experiments/"+job.experiment_id}>查看关联的单机 / 多机对照评测</a> : "普通作业：执行成功不等于通过独立正确性校验；没有关联单机基线时，不计算 η 和 S。"}
+            {job.worker_ids ? <p>仅允许选中的 {job.worker_ids.length} 台设备计算：{job.worker_ids.join("、")}</p> : null}
+          </div>
           <Section
             title="按设备分解"
             subtitle="各设备完成的任务数、耗时和成功任务占比"
@@ -445,6 +451,7 @@ export function JobDetail({ api, jobId, onBack, connectionError }: Props) {
                                     {task.summary ? (
                                       <p className="task-summary">{task.summary}</p>
                                     ) : null}
+                                    {job.workload === "infer" ? <DetectionPreview api={api} task={task} /> : null}
                                     <div className="task-assets">
                                       <section className="task-asset-group">
                                         <h4>输入（{task.inputs.length}）</h4>

@@ -235,3 +235,18 @@ cef workers / cef stats
 ### 提交者
 
 `POST /api/v1/jobs` 的 spec 支持 `submitter` 字段；CLI 会用 `CEF_SUBMITTER` 或系统用户名兜底。MD
+
+
+## Workspace and controlled experiments (2026-11-14)
+
+- `GET/POST /api/v1/conversations`: persistent team conversations. POST `{title}`.
+- `PATCH /conversations/{id}`: `{title?, archived?}`. Historical `pool` transcript is preserved.
+- `POST /agent/chat` uses `room` as conversation id; server rebuilds context from that room, excluding other in-flight turns. Archived conversations reject writes. Each assistant reply has `reply_to`.
+- `JobSpec.worker_ids: string[] | null`: null means any compatible worker; a non-empty list is an exact allowlist, combined with existing tag/model constraints. Empty/unknown ids reject. No fallback outside the allowlist.
+- `JobSpec.conversation_id/message_id`: link a submitted job to its preview; transactional idempotence prevents double submission by teammates. Job detail records device selection and conversation.
+- `InferParams.device`: `auto` (default), `cpu`, `cuda`; explicit CPU/CUDA refuses provider fallback. Old workers must upgrade before experiments; CPU reference provider is verified from output.
+- `GET/POST /experiments`: POST `{dataset, worker_ids, params, repeats:1..5, timeout_s:60..7200}`. Infer only. At least two distinct idle compatible CUDA workers, canonical identical weights, same frozen unique input set. Selected devices are reserved against unrelated CEF jobs while measuring.
+- Reference phase: run the frozen inputs on CPU on the first selected worker. Then for each repeat rotate single-device / pooled condition order, warm up each condition and measure the full identical dataset. Reference/warmup do not count in throughput. Each phase is a normal traceable job.
+- `GET /experiments/{id}` returns immutable configuration, dataset fingerprint, device snapshots, phases, timestamps, correctness, per-device contributions, resource samples, medians, eta and speedup. `POST /experiments/{id}/cancel` cancels active work and releases reservations. Interrupted runs become `interrupted` on coordinator restart and never silently resume.
+- Valid outputs must match CPU detections (class and one-to-one box/confidence tolerances), and measured outputs must record CUDAExecutionProvider. Count each final logical task at most once. Wrong/missing outputs invalidate the experiment; never publish eta from them.
+- Timing is coordinator job creation to final completion (includes queue/input transfer/result upload; excludes CPU oracle, warmup and subsequent validation). This is registered-dataset service throughput. Short windows / insufficient samples / eta>100% are explicitly flagged; saturation is not inferred from GPU load. Raw samples, all selected devices including zero contribution, retries, worker configuration and limits are retained. Never combine mismatched experiment configurations.

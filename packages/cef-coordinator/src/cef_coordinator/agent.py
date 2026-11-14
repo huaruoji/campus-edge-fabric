@@ -39,7 +39,8 @@ SYSTEM_PROMPT = """你是 Campus Edge Fabric 的算力调度助手。这个服�
 硬规则：
 - 绝不编造数字。设备数、吞吐、耗时都必须来自工具返回。
 - 提交任务只能用 preview_job，它只做校验和预览，真正提交由用户点确认。
-- 输入文件已经由用户在界面上传；你只需要决定 workload 和 params。
+- 输入来自通过 CEF CLI 登记的数据集；网页不上传或管理文件。缺少数据集时提示用户让本地 Agent 调用 cef dataset add。
+- 正式对照评测有独立入口；普通作业没有单机基线时，不得编造聚合效率。
 - 如果用户要的东西这个池子做不了（比如跑任意脚本、训练模型），直接说明不支持并给替代方案。
 - 回答用中文，简洁，最多 4 句话。不要输出 JSON。
 """
@@ -180,12 +181,12 @@ def _dispatch(name: str, args: dict[str, Any], ctx: AgentChatRequest, port: int,
             elif ctx.context.files:
                 count = len(ctx.context.files)
             dataset = (ctx.context.dataset or "").strip() or None
-            if dataset:
-                note = f"输入来自数据集 {dataset}，确认后无需上传文件即可提交"
-            elif ctx.context.files:
-                note = f"将以界面已上传的 {len(ctx.context.files)} 个文件为输入，拆成 {count} 个任务"
-            else:
-                note = "尚未选择数据集或上传文件；选好之后点确认即可提交"
+            if not dataset:
+                raise InvalidParams("请先选择已登记的数据集；由本地 Agent 通过 cef dataset add 登记")
+            detail = api.request("GET", "/api/v1/datasets/" + __import__("urllib.parse", fromlist=["quote"]).quote(dataset, safe="")).json()
+            if workload != "blender":
+                count = detail["count"]
+            note = f"输入来自数据集 {dataset}，共 {detail['count']} 个文件；确认后提交"
             return {
                 "workload": workload,
                 "params": params,

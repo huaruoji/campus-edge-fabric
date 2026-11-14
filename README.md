@@ -90,7 +90,9 @@ uv run cef ... job watch <job_id>
 uv run cef ... job result <job_id> -o out.zip
 ```
 
-也可以直接用网页 `http://<coordinator>:8080/`（上传 → 看进度 → 下载）或 `/docs` 里的 OpenAPI。
+网页使用已登记数据集：聊天规划 → 选择设备 → 确认任务 → 查看检测图与下载。文件由本地 Agent / CEF CLI 登记；也可使用 `/docs` 里的 OpenAPI。
+
+新版[共享会话与一键对照评测说明](docs/workspace-and-evaluation.md)包含 Worker 升级要求、计量口径和五分钟演示安排。
 
 ### 3.1 让 agent 帮你递交（可选，但很省事）
 

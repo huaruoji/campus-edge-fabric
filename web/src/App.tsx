@@ -5,25 +5,28 @@ import { usePolling } from "./hooks/usePolling";
 import { ConnectionBar } from "./components/ConnectionBar";
 import { StatsStrip } from "./components/StatsStrip";
 import { WorkerPanel } from "./components/WorkerPanel";
+import { ExperimentPanel } from "./components/ExperimentPanel";
 import { JobChat } from "./components/JobChat";
 import { JobList } from "./components/JobList";
 import { JobDetail } from "./components/JobDetail";
 import { EmptyBox } from "./components/ui";
 
-type Route = { name: "devices" } | { name: "submit" } | { name: "jobs" } | { name: "job"; jobId: string };
+type Route = { name: "experiments" } | { name: "devices" } | { name: "submit" } | { name: "jobs" } | { name: "job"; jobId: string };
 
-type NavName = "devices" | "submit" | "jobs";
+type NavName = "experiments" | "devices" | "submit" | "jobs";
 
 const ROUTE_TITLES: Record<Route["name"], string> = {
   // 各页内部的区块标题由 WorkerPanel / JobChat / JobDetail 提供，
   // 页头标题刻意不与这些区块标题重复（设备面板 / 算力助手 / 任务列表）。
-  devices: "集群概览",
-  submit: "提交任务",
-  jobs: "任务列表",
+  experiments: "性能评测",
+  devices: "设备",
+  submit: "算力助手",
+  jobs: "任务与结果",
   job: "任务详情",
 };
 
 const ROUTE_DESCRIPTIONS: Record<Route["name"], string> = {
+  experiments: "一次发起单机与多机对照，核验结果、设备贡献与聚合效率。",
   devices: "查看每台边缘节点的在线状态、负载与吞吐；离线设备可以移除记录。",
   submit: "用一句话描述要做的处理，助手会给出工作负载与参数，确认后提交。",
   jobs: "按创建时间倒序显示最近 50 个作业，点击任务名查看明细。",
@@ -31,14 +34,17 @@ const ROUTE_DESCRIPTIONS: Record<Route["name"], string> = {
 };
 
 const NAV_ITEMS: Array<{ hash: string; name: NavName; label: string }> = [
-  { hash: "#/devices", name: "devices", label: "设备面板" },
   { hash: "#/submit", name: "submit", label: "算力助手" },
-  { hash: "#/jobs", name: "jobs", label: "任务列表" },
+  { hash: "#/jobs", name: "jobs", label: "任务与结果" },
+  { hash: "#/experiments", name: "experiments", label: "性能评测" },
+  { hash: "#/devices", name: "devices", label: "设备" },
 ];
 
 function parseRoute(hash: string): Route {
   const path = hash.replace(/^#\/?/, "");
   const parts = path.split("/").filter(Boolean);
+  if (!parts[0]) return {name: "submit"};
+  if (parts[0] === "experiments") return {name: "experiments"};
   if (parts[0] === "submit") return { name: "submit" };
   if (parts[0] === "jobs" && parts[1]) {
     try {
@@ -225,6 +231,8 @@ export default function App() {
           </>
         ) : route.name === "submit" ? (
           <JobChat key={connectionVersion} api={api} token={settings.token} />
+        ) : route.name === "experiments" ? (
+          <ExperimentPanel key={connectionVersion} api={api} />
         ) : route.name === "jobs" ? (
           <JobList
             jobs={jobs}

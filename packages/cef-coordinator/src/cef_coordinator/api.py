@@ -85,6 +85,12 @@ router = APIRouter(prefix="/api/v1")
 
 
 # ------------------------------------------------------------------ plumbing
+def _guess_mime(name: str) -> str | None:
+    # Windows registry MIME associations can override Python's standard WebP type.
+    known = {".webp": "image/webp", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".json": "application/json"}
+    return known.get(os.path.splitext(name)[1].lower()) or mimetypes.guess_type(name)[0]
+
+
 def settings_of(request: Request) -> Settings:
     return request.app.state.settings  # type: ignore[no-any-return]
 
@@ -101,7 +107,7 @@ def _blob_rows(conn: sqlite3.Connection, refs: list[tuple[str, str, int, str | N
     now = time.time()
     for sha, name, size, mime in refs:
         if not mime or mime == "application/octet-stream":
-            mime = mimetypes.guess_type(name)[0] or mime
+            mime = _guess_mime(name) or mime
         conn.execute(
             "INSERT OR IGNORE INTO blobs (sha256, size, path, mime, name, created_at) VALUES (?,?,?,?,?,?)",
             (sha, size, "", mime, name, now),
@@ -154,6 +160,18 @@ async def create_job(
         raise _err(400, "invalid_params", str(exc)) from exc
     params = params_model.model_dump()
 
+    if job_spec.worker_ids is not None:
+        if not job_spec.worker_ids or len(set(job_spec.worker_ids)) != len(job_spec.worker_ids):
+            raise _err(400, "invalid_params", "worker_ids 必须为非空且不重复的设备列表")
+        conn = db.reading(s.db_path)
+        try:
+            known = {r["id"] for r in db.rows(conn, "SELECT id FROM workers")}
+        finally:
+            conn.close()
+        if not set(job_spec.worker_ids) <= known:
+            raise _err(400, "invalid_params", "选择的设备不存在")
+    if bool(job_spec.conversation_id) != bool(job_spec.message_id):
+        raise _err(400, "invalid_params", "conversation_id 和 message_id 必须同时提供")
     stored: list[tuple[str, str, int, str | None]] = []
     tasks: list[tuple[int, dict[str, Any], list[dict[str, Any]]]] = []
 
@@ -178,7 +196,9 @@ async def create_job(
 
     refs: list[dict[str, Any]] = []
 
-    if job_spec.dataset:
+    if "cef.inputs" in request.scope:
+        refs = request.scope["cef.inputs"]
+    elif job_spec.dataset:
         if files:
             raise _err(400, "invalid_params", "dataset 与直接上传文件不能同时使用")
         refs = _dataset_files(s, job_spec.dataset)
@@ -232,10 +252,19 @@ async def create_job(
     job_id = new_id("job")
     now = time.time()
     # A job without a name is indistinguishable from any other ID on the dashboard.
-    display_name = (job_spec.name or "").strip() or time.strftime(
-        f"{job_spec.workload}-%m%d-%H%M", time.localtime(now)
-    )
+    display_name = (job_spec.name or "").strip() or time.strftime(f"{job_spec.workload}-%m%d-%H%M", time.localtime(now))
     with db.transaction(s.db_path) as conn:
+        if job_spec.message_id:
+            message = db.one(
+                conn, "SELECT * FROM chat_messages WHERE id=? AND room=? AND role='assistant'", (job_spec.message_id, job_spec.conversation_id)
+            )
+            conversation = db.one(conn, "SELECT * FROM conversations WHERE id=? AND archived=0", (job_spec.conversation_id,))
+            if not message or not message["preview"] or not conversation:
+                raise _err(409, "invalid_preview", "预览不存在或对话已归档")
+            existing = db.one(conn, "SELECT * FROM jobs WHERE message_id=?", (job_spec.message_id,))
+            if existing:
+                count = db.one(conn, "SELECT COUNT(*) n FROM tasks WHERE job_id=?", (existing["id"],))["n"]
+                return JobCreated(job_id=existing["id"], total=count, state=existing["state"])
         _blob_rows(conn, stored)
         conn.execute(
             """INSERT INTO jobs (id,name,workload,params,state,priority,required_tag,required_model_sha,
@@ -254,6 +283,18 @@ async def create_job(
                 now,
             ),
         )
+        conn.execute(
+            "UPDATE jobs SET worker_ids=?, conversation_id=?, message_id=?, experiment_id=? WHERE id=?",
+            (
+                json.dumps(job_spec.worker_ids) if job_spec.worker_ids is not None else None,
+                job_spec.conversation_id,
+                job_spec.message_id,
+                request.scope.get("cef.experiment"),
+                job_id,
+            ),
+        )
+        if job_spec.message_id:
+            conn.execute("UPDATE chat_messages SET job_id=? WHERE id=?", (job_id, job_spec.message_id))
         for idx, task_params, inputs in tasks:
             conn.execute(
                 """INSERT INTO tasks (id,job_id,idx,state,attempt,max_attempts,params,inputs,queued_at,updated_at)
@@ -317,6 +358,9 @@ def get_job(request: Request, job_id: str, tasks_limit: int = Query(500, ge=0, l
             eta_s=eta,
             per_worker=per_worker,
             tasks=tasks,
+            worker_ids=json.loads(job["worker_ids"]) if job["worker_ids"] else None,
+            conversation_id=job["conversation_id"],
+            experiment_id=job["experiment_id"],
             required_tag=job["required_tag"],
             params=job_params,
             required_model_sha=job["required_model_sha"] if "required_model_sha" in job.keys() else None,
@@ -484,16 +528,10 @@ async def task_complete(
         refs.append((sha, upload.filename or sha[:12], size, upload.content_type))
     output = cm.output or {}
     output["files"] = [{"name": n, "sha256": sha, "size": size} for sha, n, size, _mime in refs]
-    output_sha = refs[0][0] if len(refs) == 1 else (
-        hashlib.sha256("".join(r[0] for r in refs).encode()).hexdigest() if refs else None
-    )
+    output_sha = refs[0][0] if len(refs) == 1 else (hashlib.sha256("".join(r[0] for r in refs).encode()).hexdigest() if refs else None)
     # output mime is usually only inferable from the filename (worker uploads raw)
-    refs = [
-        (sha, name, size, mime or mimetypes.guess_type(name)[0]) for sha, name, size, mime in refs
-    ]
-    ok, reason = scheduler.complete_task(
-        s.db_path, s, worker_id, task_id, cm.attempt, cm.duration_s, output, output_sha
-    )
+    refs = [(sha, name, size, mime or _guess_mime(name)) for sha, name, size, mime in refs]
+    ok, reason = scheduler.complete_task(s.db_path, s, worker_id, task_id, cm.attempt, cm.duration_s, output, output_sha)
     if not ok:
         raise _err(409 if reason == "stale_attempt" else 404, str(reason), "result not credited")
     with db.transaction(s.db_path) as conn:
@@ -504,9 +542,7 @@ async def task_complete(
 @router.post("/workers/{worker_id}/tasks/{task_id}/fail", response_model=FailResponse)
 def task_fail(request: Request, worker_id: str, task_id: str, fail: FailRequest) -> FailResponse:
     s = settings_of(request)
-    ok, requeued, left = scheduler.fail_task(
-        s.db_path, s, worker_id, task_id, fail.attempt, fail.error, fail.retryable
-    )
+    ok, requeued, left = scheduler.fail_task(s.db_path, s, worker_id, task_id, fail.attempt, fail.error, fail.retryable)
     if not ok:
         raise _err(409, "stale_attempt", "failure report ignored (lease lost)")
     return FailResponse(requeued=requeued, attempts_left=left)
@@ -535,9 +571,7 @@ def list_workers(request: Request) -> WorkerList:
                 "SELECT COUNT(*) n, AVG(duration) d, SUM(duration) t FROM tasks WHERE worker_id=? AND state='succeeded'",
                 (w["id"],),
             )
-            failed = db.one(
-                conn, "SELECT COUNT(*) n FROM tasks WHERE worker_id=? AND state='failed'", (w["id"],)
-            )
+            failed = db.one(conn, "SELECT COUNT(*) n FROM tasks WHERE worker_id=? AND state='failed'", (w["id"],))
             recent = db.one(
                 conn,
                 "SELECT COUNT(*) n FROM tasks WHERE worker_id=? AND state='succeeded' AND finished_at > ?",
@@ -615,21 +649,15 @@ def pool_stats(request: Request, window: int = Query(300, ge=10, le=86400)) -> P
     now = time.time()
     since = now - window
     try:
-        tasks_succeeded = db.one(
-            conn, "SELECT COUNT(*) n FROM tasks WHERE state='succeeded' AND finished_at > ?", (since,)
-        )["n"]
-        failed_in_window = db.one(
-            conn, "SELECT COUNT(*) n FROM tasks WHERE state='failed' AND finished_at > ?", (since,)
-        )["n"]
+        tasks_succeeded = db.one(conn, "SELECT COUNT(*) n FROM tasks WHERE state='succeeded' AND finished_at > ?", (since,))["n"]
+        failed_in_window = db.one(conn, "SELECT COUNT(*) n FROM tasks WHERE state='failed' AND finished_at > ?", (since,))["n"]
         queued = db.one(conn, "SELECT COUNT(*) n FROM tasks WHERE state='queued'")["n"]
         succeeded_total = db.one(conn, "SELECT COUNT(*) n FROM tasks WHERE state='succeeded'")["n"]
         failed_total = db.one(conn, "SELECT COUNT(*) n FROM tasks WHERE state='failed'")["n"]
         retries_total = db.one(conn, "SELECT COALESCE(SUM(attempt-1),0) n FROM tasks WHERE state='succeeded'")["n"]
         jobs_total = db.one(conn, "SELECT COUNT(*) n FROM jobs")["n"]
         jobs_running = db.one(conn, "SELECT COUNT(*) n FROM jobs WHERE state IN ('queued','running')")["n"]
-        retries = db.one(
-            conn, "SELECT COALESCE(SUM(attempt-1),0) n FROM tasks WHERE state='succeeded' AND finished_at > ?", (since,)
-        )["n"]
+        retries = db.one(conn, "SELECT COALESCE(SUM(attempt-1),0) n FROM tasks WHERE state='succeeded' AND finished_at > ?", (since,))["n"]
         durations = [
             r["duration"]
             for r in db.rows(
@@ -648,9 +676,7 @@ def pool_stats(request: Request, window: int = Query(300, ge=10, le=86400)) -> P
                 (w["id"], since),
             )
             step = max(1, len(series) // 120)
-            points = [
-                UtilPoint(ts=r["ts"], cpu_pct=r["cpu_pct"], gpu_pct=r["gpu_pct"]) for r in series[::step]
-            ]
+            points = [UtilPoint(ts=r["ts"], cpu_pct=r["cpu_pct"], gpu_pct=r["gpu_pct"]) for r in series[::step]]
             cpus = [r["cpu_pct"] for r in series if r["cpu_pct"] is not None]
             gpus = [r["gpu_pct"] for r in series if r["gpu_pct"] is not None]
             per_worker.append(
@@ -676,9 +702,7 @@ def pool_stats(request: Request, window: int = Query(300, ge=10, le=86400)) -> P
             retries_total=int(retries_total),
             tasks_per_min=round(tasks_succeeded / (window / 60.0), 2),
             p50_duration_s=round(durations[len(durations) // 2], 3) if durations else None,
-            p95_duration_s=round(durations[int(len(durations) * 0.95) - 1 if len(durations) > 1 else 0], 3)
-            if durations
-            else None,
+            p95_duration_s=round(durations[int(len(durations) * 0.95) - 1 if len(durations) > 1 else 0], 3) if durations else None,
             retries=int(retries),
             workers=per_worker,
             bottleneck=_bottleneck(online, queued, int(failed_in_window), int(retries), per_worker),
@@ -720,7 +744,7 @@ def get_blob(request: Request, sha: str) -> Response:
         if row is not None:
             mime = row["mime"]
             if not mime and row["name"]:
-                mime = mimetypes.guess_type(str(row["name"]))[0]
+                mime = _guess_mime(str(row["name"]))
     finally:
         conn.close()
     return FileResponse(
@@ -743,9 +767,7 @@ def list_events(request: Request, limit: int = Query(100, ge=1, le=1000)) -> dic
 
 # --------------------------------------------------------------------- helpers
 def _counts(conn: sqlite3.Connection, job_id: str) -> dict[str, int]:
-    counts = {str(r["state"]): int(r["n"]) for r in db.rows(
-        conn, "SELECT state, COUNT(*) n FROM tasks WHERE job_id=? GROUP BY state", (job_id,)
-    )}
+    counts = {str(r["state"]): int(r["n"]) for r in db.rows(conn, "SELECT state, COUNT(*) n FROM tasks WHERE job_id=? GROUP BY state", (job_id,))}
     total = sum(counts.values())
     queued = counts.get(TaskState.QUEUED, 0) + counts.get(TaskState.LEASED, 0)
     return {
@@ -772,9 +794,7 @@ def _summary(job: sqlite3.Row, counts: dict[str, int]) -> JobSummary:
     )
 
 
-def _per_worker(
-    conn: sqlite3.Connection, job_id: str, total_succeeded: int, names: dict[str, str]
-) -> list[PerWorkerStat]:
+def _per_worker(conn: sqlite3.Connection, job_id: str, total_succeeded: int, names: dict[str, str]) -> list[PerWorkerStat]:
     rows = db.rows(
         conn,
         """SELECT worker_id, COUNT(*) n, AVG(duration) d, SUM(duration) t
@@ -859,6 +879,7 @@ def _manifest(conn: sqlite3.Connection, job: sqlite3.Row, counts: dict[str, int]
         entries=entries,
     )
 
+
 # ---------------------------------------------------------------------- agent
 @router.post("/agent/chat", response_model=AgentChatResponse)
 def agent_chat(request: Request, req: AgentChatRequest) -> AgentChatResponse:
@@ -868,27 +889,53 @@ def agent_chat(request: Request, req: AgentChatRequest) -> AgentChatResponse:
     the same token-scoped operations a human has. It can only *preview* a job;
     the actual POST /jobs comes from the human confirming in the UI.
     """
+    from cef_protocol.models import ChatMessage
+
+    from .workspace import chat_locks, conversation_open
+
     s = settings_of(request)
-    author = (req.author or "").strip()[:40] or "队友"
-    last_user = next((m.content for m in reversed(req.messages) if m.role == "user"), "")
-    user_id = _save_chat(s.db_path, req.room, "user", author, last_user) if last_user else None
+    conversation_open(s, req.room)
+    lock = chat_locks.setdefault(req.room, __import__("threading").Lock())
+    if not lock.acquire(blocking=False):
+        raise _err(409, "conversation_busy", "本对话的上一条消息仍在处理中，请稍后发送")
     try:
-        reply = agent.chat(req, s.port, s.token)
-    except agent.AgentUnavailable as exc:
-        raise _err(503, "agent_unavailable", str(exc)) from exc
-    except agent.AgentError as exc:
-        raise _err(502, "agent_error", str(exc)) from exc
-    reply.user_message_id = user_id
-    reply.assistant_message_id = _save_chat(
-        s.db_path,
-        req.room,
-        "assistant",
-        "算力助手",
-        reply.reply,
-        trace=[t.model_dump() for t in reply.tool_trace],
-        preview=reply.preview.model_dump() if reply.preview else None,
-    )
-    return reply
+        author = (req.author or "").strip()[:40] or "队友"
+        last_user = next((m.content for m in reversed(req.messages) if m.role == "user"), "")
+        conn = db.reading(s.db_path)
+        try:
+            history = db.rows(
+                conn,
+                "SELECT role,content FROM (SELECT * FROM chat_messages WHERE room=? ORDER BY created_at DESC LIMIT 12) ORDER BY created_at",
+                (req.room,),
+            )
+        finally:
+            conn.close()
+        req = req.model_copy(
+            update={"messages": [ChatMessage(role=r["role"], content=r["content"]) for r in history] + [ChatMessage(role="user", content=last_user)]}
+        )
+        user_id = _save_chat(s.db_path, req.room, "user", author, last_user) if last_user else None
+        try:
+            reply = agent.chat(req, s.port, s.token)
+        except agent.AgentUnavailable as exc:
+            raise _err(503, "agent_unavailable", str(exc)) from exc
+        except agent.AgentError as exc:
+            raise _err(502, "agent_error", str(exc)) from exc
+        conversation_open(s, req.room)
+        reply.user_message_id = user_id
+        reply.assistant_message_id = _save_chat(
+            s.db_path,
+            req.room,
+            "assistant",
+            "算力助手",
+            reply.reply,
+            trace=[t.model_dump() for t in reply.tool_trace],
+            preview=reply.preview.model_dump() if reply.preview else None,
+        )
+        with db.transaction(s.db_path) as conn:
+            conn.execute("UPDATE chat_messages SET reply_to=? WHERE id=?", (user_id, reply.assistant_message_id))
+        return reply
+    finally:
+        lock.release()
 
 
 @router.delete("/workers/{worker_id}", status_code=204)
@@ -1017,6 +1064,7 @@ def _save_chat(
                 time.time(),
             ),
         )
+        conn.execute("UPDATE conversations SET updated_at=? WHERE id=?", (time.time(), room))
     return message_id
 
 
@@ -1025,13 +1073,23 @@ def chat_messages(
     request: Request,
     room: str = "pool",
     after: float = Query(0.0, ge=0.0),
+    before: float | None = Query(None, gt=0.0),
     limit: int = Query(200, ge=1, le=500),
 ) -> ChatList:
     """Incremental transcript. Everyone with the token sees the same room."""
     s = settings_of(request)
     conn = db.reading(s.db_path)
     try:
-        if after > 0:
+        if before is not None:
+            rows = db.rows(
+                conn,
+                (
+                    "SELECT * FROM (SELECT * FROM chat_messages WHERE room=? AND created_at < ? "
+                    "ORDER BY created_at DESC LIMIT ?) ORDER BY created_at ASC"
+                ),
+                (room, before, limit),
+            )
+        elif after > 0:
             rows = db.rows(
                 conn,
                 "SELECT * FROM chat_messages WHERE room=? AND created_at > ? ORDER BY created_at ASC LIMIT ?",
@@ -1043,13 +1101,14 @@ def chat_messages(
                 "SELECT * FROM (SELECT * FROM chat_messages WHERE room=? ORDER BY created_at DESC LIMIT ?) ORDER BY created_at ASC",
                 (room, limit),
             )
-        latest = db.one(conn, "SELECT MAX(created_at) m FROM chat_messages WHERE room=?", (room,))
+        latest = {"m": rows[-1]["created_at"] if rows else after}
     finally:
         conn.close()
     messages = [
         ChatEntry(
             id=r["id"],
             room=r["room"],
+            reply_to=r["reply_to"],
             role=r["role"],
             author=r["author"],
             content=r["content"],
@@ -1070,8 +1129,7 @@ def chat_prune(request: Request, older_than_days: float = Query(7.0, ge=0.0)) ->
     cutoff = time.time() - older_than_days * 86400
     with db.transaction(s.db_path) as conn:
         removed = conn.execute(
-            "DELETE FROM chat_messages WHERE created_at < ? AND id NOT IN "
-            "(SELECT id FROM chat_messages ORDER BY created_at DESC LIMIT 200)",
+            "DELETE FROM chat_messages WHERE created_at < ? AND id NOT IN (SELECT id FROM chat_messages ORDER BY created_at DESC LIMIT 200)",
             (cutoff,),
         ).rowcount
     return {"removed": removed, "older_than_days": older_than_days}
@@ -1094,12 +1152,7 @@ def list_tags(request: Request) -> TagList:
             entry = counts.setdefault(str(tag), {"total": 0, "online": 0})
             entry["total"] += 1
             entry["online"] += online
-    return TagList(
-        tags=[
-            TagSummary(tag=tag, category=categorize(tag), total=v["total"], online=v["online"])
-            for tag, v in sorted(counts.items())
-        ]
-    )
+    return TagList(tags=[TagSummary(tag=tag, category=categorize(tag), total=v["total"], online=v["online"]) for tag, v in sorted(counts.items())])
 
 
 @router.patch("/workers/{worker_id}", response_model=WorkerPatchResponse)
@@ -1393,11 +1446,20 @@ def _blocked_reason(conn: sqlite3.Connection, job: sqlite3.Row, counts: dict[str
     """A queued job that cannot possibly start should say why, not just sit there."""
     if counts["queued"] == 0 or counts["succeeded"] or counts["failed"]:
         return None
+    selected = json.loads(job["worker_ids"]) if job["worker_ids"] else None
+    if selected:
+        online = [r for r in db.rows(conn, "SELECT * FROM workers WHERE state='online'") if r["id"] in selected]
+        if not online:
+            return "所选设备全部离线。任务等待这些设备恢复，不会转给未选中的机器。"
+        if not job["experiment_id"] and all(db.one(conn, "SELECT 1 FROM experiment_workers WHERE worker_id=?", (r["id"],)) for r in online):
+            return "所选设备正在进行对照评测，普通任务将等待评测结束。"
     required = job["required_model_sha"] if "required_model_sha" in job.keys() else None
     if not required:
         return None
     holders = 0
-    for row in db.rows(conn, "SELECT workloads FROM workers WHERE state != 'offline'"):
+    for row in db.rows(conn, "SELECT id,workloads FROM workers WHERE state != 'offline'"):
+        if selected and row["id"] not in selected:
+            continue
         for support in json.loads(row["workloads"] or "[]"):
             for model in support.get("models") or []:
                 if model.get("sha256") == required:

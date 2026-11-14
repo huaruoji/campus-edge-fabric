@@ -214,7 +214,9 @@ def claim(
             tag_marks = ",".join("?" * len(tags))
             tag_clause += f" OR j.required_tag IN ({tag_marks})"
             args.extend(tags)
-        args.append(capacity)
+        reservation = db.one(conn, "SELECT experiment_id FROM experiment_workers WHERE worker_id=?", (worker["id"],))
+        experiment = reservation["experiment_id"] if reservation else None
+        args.extend([worker["id"], experiment, experiment, capacity])
         candidates = db.rows(
             conn,
             f"""SELECT t.id AS task_id, t.job_id, t.idx, t.attempt, t.max_attempts,
@@ -225,6 +227,8 @@ def claim(
                   AND j.workload IN ({wl_marks})
                   AND ({model_clause})
                   AND ({tag_clause})
+                  AND (j.worker_ids IS NULL OR EXISTS (SELECT 1 FROM json_each(j.worker_ids) WHERE value=?))
+                  AND ((? IS NULL AND j.experiment_id IS NULL) OR j.experiment_id=?)
                 ORDER BY j.priority DESC, j.created_at ASC, t.idx ASC
                 LIMIT ?""",
             tuple(args),

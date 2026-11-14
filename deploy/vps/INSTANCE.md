@@ -14,7 +14,8 @@
 | 数据目录 | `/var/lib/cef`（SQLite + blob） |
 | Token | `/etc/cef/token`（0600；**只写路径，值不入库**） |
 | 服务 | `cef-coord.service`（监听 `127.0.0.1:8090`） |
-| 自动部署 | `cef-autodeploy.timer`：每 60 s 拉 `origin/main`，依赖重装 + 重启，健康检查失败会非零退出 |
+| 自动部署 | `cef-autodeploy.timer`：每 60 s 拉 `origin/main` → `uv sync --frozen` → **前端 `npm ci + npm run build`** → 重启 → 健康检查 |
+| 前端构建 | Node 22 装在 `/opt/node`，`web/node_modules` 常驻；`package-lock.json` 变了才重跑 `npm ci` |
 | 反向代理 | Caddy（`127.0.0.1:8443`），站点块见 `deploy/vps/caddy.snippet` |
 | 入口链路 | 浏览器 → `:443` xray(Reality fallback) → Caddy `:8443` → `127.0.0.1:8090` |
 | DNS | `A cef.huaruoji.com → 179.253.239.163`（DNS only，走 Let's Encrypt 通配证书） |
@@ -25,7 +26,8 @@
 - **443 属于 xray**，不要往上加站点；所有公网站点都走 `:8443` + Reality fallback。
 - 改 Caddyfile 必须：先备份 → `caddy validate` → `systemctl reload caddy`。
 - 站点块里 **`bind 127.0.0.1` 不能省**：少了它 Caddy 会绑 `*:8443`，把同机的 3x-ui 面板代理一起暴露到公网（已踩过一次）。
-- 磁盘只有 16 GB 可用：输入图先压到 ≤500 KB，别让 blob 无限增长（GC 待实现）。
+- 磁盘只有 15 GB 可用（node 205 MB + node_modules 66 MB 已占）：输入图先压到 ≤500 KB，别让 blob 无限增长（GC 待实现）。
+- 前端构建失败**不会挂站**：脚本保留上一次构建产物并继续重启后端，日志里会有 `WARN: frontend build failed`。
 - 备份：`/etc/caddy/Caddyfile.bak.*`。
 
 ## 队友怎么连

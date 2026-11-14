@@ -181,6 +181,7 @@ Coordinator/Worker 对接请先读 [固定契约 v1](docs/worker-contract-v1.md)
 
 ## 8. 未完成 / 明确声明
 
+- 前端构建：VPS 会在每次 push 后自动 `npm run build`，所以**只推 `web/src/` 也能生效**；仓库里提交的 `dist` 只作为 fresh clone 的兜底
 - **模型文件不随仓库分发**：`infer` 需要把 `*.onnx` 放到 `~/.cef/models/`（或 `--model-dir`）
 - `blender` adapter 需要在每台设备预装 Blender（版本尽量一致），当前只做了逐帧渲染路径
 - 鉴权是单一共享 token（LAN/Tailscale 内使用），没有做多租户与细粒度权限

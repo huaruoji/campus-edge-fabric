@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import type { ApiClient, ProvisionStatus, TagStat, Worker, WorkerState, WorkloadSupport } from "../api";
 import {
@@ -340,21 +340,21 @@ function WorkerCard({
   /** null = 还在探测；false = 后端没有该接口（隐藏入口）；true = 有接口，可请求。 */
   const [provisionSupported, setProvisionSupported] = useState<boolean | null>(null);
   const [showProvision, setShowProvision] = useState(false);
-  const probeRef = useRef(false);
   const tagInputId = useId();
   const provisionPanelId = useId();
 
-  // 只在挂载后探测一次：GET /workers/{id}/provision。404 → 整个入口隐藏；
+  // 每次连接或在线状态变化重新探测，兼容 StrictMode 的 effect 重建。
+  // GET /workers/{id}/provision。404 → 整个入口隐藏；
   // 403 → 接口存在但设备没授权，入口保留（请求时后端会再次拒绝）。
   useEffect(() => {
-    if (probeRef.current || !api.hasToken || worker.state === "offline") return;
-    probeRef.current = true;
+    if (!api.hasToken || worker.state === "offline") return;
+    setProvisionSupported(null);
     const controller = new AbortController();
     void (async () => {
       try {
-        const list = await api.getProvision(worker.worker_id, controller.signal);
+        const status = await api.getProvision(worker.worker_id, controller.signal);
         if (controller.signal.aborted) return;
-        setProvisionStatus(list[0] ?? null);
+        setProvisionStatus(status);
         setProvisionSupported(true);
       } catch (error) {
         if (controller.signal.aborted) return;

@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, KeyboardEvent } from "react";
 import type {
-  AgentPreview,
   AgentToolTrace,
   ApiClient,
   ChatMessage,
   DatasetSummary,
-  JobSpec,
   ServerChatMessage,
   TagStat,
   Workload,
@@ -17,6 +15,7 @@ import { usePolling, usePollingLoop } from "../hooks/usePolling";
 import { PRESETS, workloadLabel, type Preset } from "../presets";
 import { EmptyBox, ErrorBox, LoadingLine, Section } from "./ui";
 import "../chat.css";
+import { TaskPreview } from "./TaskPreview";
 
 /** 共享对话轮询间隔（毫秒）。 */
 const CHAT_POLL_MS = 4000;
@@ -682,17 +681,15 @@ export function JobChat({ api }: { api: ApiClient; token: string }) {
                     {entry.job_id ? (
                       <a href={"#/jobs/" + encodeURIComponent(entry.job_id)}>查看任务详情</a>
                     ) : null}
-                    {entry.preview ? (
-                      <PreviewBlock
-                        preview={entry.preview}
-                        api={api}
-                        files={files}
-                        dataset={datasetContext}
-                        onSubmitted={(jobId) => {
-                          setNotice("已提交任务 " + jobId + "，可以在任务详情里查看进度。");
-                        }}
-                      />
-                    ) : null}
+                    {entry.preview ? <TaskPreview
+                      api={api}
+                      preview={entry.preview}
+                      files={dataSource === "files" || datasetEndpointMissing ? files : []}
+                      dataset={selectedDataset ?? undefined}
+                      requiredTag={tagFilter}
+                      existingJobId={entry.job_id}
+                      messageId={entry.id}
+                    /> : null}
                     {entry.trace && entry.trace.length > 0 ? (
                       <details className="job-chat-trace">
                         <summary>工具调用记录（{entry.trace.length}）</summary>
@@ -768,103 +765,5 @@ export function JobChat({ api }: { api: ApiClient; token: string }) {
         </form>
       </div>
     </Section>
-  );
-}
-
-/**
- * 助手给出的任务预览 + **确认提交**。
- *
- * 提交规则（与后端 JobSpec 对齐）：
- * - 有数据集（预览自带的优先，其次当前选择）→ spec.dataset，且**不传任何文件**；
- * - 没有数据集但已载入文件 → spec.inputs 列出文件名，文件随 multipart 一起传；
- * - 两者都没有 → 按钮禁用，提示先上传文件或选数据集。
- * 提交成功后按钮变「已提交」并给出任务详情链接，避免重复提交。
- */
-function PreviewBlock({
-  preview,
-  api,
-  files,
-  dataset,
-  onSubmitted,
-}: {
-  preview: AgentPreview;
-  api: ApiClient;
-  files: File[];
-  dataset: string | null;
-  onSubmitted: (jobId: string) => void;
-}) {
-  const [submitting, setSubmitting] = useState(false);
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [error, setError] = useState<unknown>(null);
-
-  const dataRef = preview.dataset ?? dataset ?? null;
-  const useFiles = dataRef === null;
-  const submitted = jobId !== null;
-  const canSubmit = !submitting && !submitted && (!useFiles || files.length > 0);
-
-  async function submit(): Promise<void> {
-    if (!canSubmit) return;
-    setSubmitting(true);
-    setError(null);
-    const spec: JobSpec = {
-      workload: preview.workload,
-      params: preview.params,
-      inputs: useFiles ? files.map((file) => ({ name: file.name })) : [],
-    };
-    if (dataRef) spec.dataset = dataRef;
-    try {
-      const created = await api.submitJob(spec, useFiles ? files : []);
-      setJobId(created.job_id);
-      onSubmitted(created.job_id);
-    } catch (cause) {
-      setError(cause);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <div className="job-chat-preview">
-      <div className="job-chat-preview-head">
-        <span>{workloadLabel(preview.workload)}</span>
-        <span>{preview.task_count === null ? "任务数待定" : "预计 " + preview.task_count + " 个任务"}</span>
-      </div>
-      <code className="job-chat-preview-params">{JSON.stringify(preview.params)}</code>
-      {preview.note ? <p>{preview.note}</p> : null}
-
-      <div className="job-chat-preview-submit">
-        <span className="job-chat-preview-source">
-          {dataRef
-            ? "数据来源：数据集 " + dataRef + "（不传文件）"
-            : useFiles && files.length > 0
-              ? "数据来源：待上传 " + files.length + " 个文件"
-              : "数据来源：未选择"}
-        </span>
-        {submitted ? (
-          <>
-            <span className="badge badge--ok">已提交</span>
-            <a href={"#/jobs/" + encodeURIComponent(jobId)}>查看任务 {jobId}</a>
-          </>
-        ) : (
-          <button
-            type="button"
-            className="btn btn--sm btn--primary"
-            onClick={() => void submit()}
-            disabled={!canSubmit}
-            title={
-              !useFiles || files.length > 0
-                ? "按上面的参数提交任务"
-                : "先上传文件，或把数据来源切换成已登记数据集"
-            }
-          >
-            {submitting ? "提交中…" : "确认提交"}
-          </button>
-        )}
-      </div>
-      {!useFiles || files.length > 0 ? null : (
-        <p className="field-hint">先上传文件，或在上方把数据来源切到已登记数据集。</p>
-      )}
-      {error ? <ErrorBox error={error} compact /> : null}
-    </div>
   );
 }

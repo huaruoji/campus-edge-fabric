@@ -608,37 +608,20 @@ function normalizeProvisionStatus(raw: unknown, fallback: { worker_id?: string; 
   const r = asRecord(raw);
   if (!r) throw new CefApiError("parse", "环境配置接口返回的不是 JSON 对象。");
   const stateRaw = asString(r.state) ?? asString(r.status);
+  if (!(PROVISION_STATES as readonly string[]).includes(stateRaw ?? "")) {
+    throw new CefApiError("parse", "环境配置接口返回了未知状态。");
+  }
   return {
     id: asString(r.id) ?? "",
     worker_id: asString(r.worker_id) ?? fallback.worker_id ?? "",
     recipe: asString(r.recipe) ?? fallback.recipe ?? "",
-    state: (PROVISION_STATES as readonly string[]).includes(stateRaw ?? "")
-      ? (stateRaw as ProvisionState)
-      : "queued",
-    dry_run: r.dry_run !== false,
+    state: stateRaw as ProvisionState,
+    dry_run: r.dry_run === true,
     // 常见字段名：log / logs；也接受 message。
     log: normalizeProvisionLog(r.log ?? r.logs ?? r.message),
     created_at: asNumberOrNull(r.created_at),
     updated_at: asNumberOrNull(r.updated_at),
   };
-}
-
-/** GET 返回 {requests:[...]}；单条坏记录不应该让整个列表报错。 */
-function normalizeProvisionList(raw: unknown, workerId: string): ProvisionStatus[] {
-  const r = asRecord(raw);
-  const list = Array.isArray(raw) ? raw : r && Array.isArray(r.requests) ? r.requests : [];
-  const out: ProvisionStatus[] = [];
-  for (const item of list) {
-    const rec = asRecord(item);
-    if (!rec) continue;
-    try {
-      out.push(normalizeProvisionStatus(rec, { worker_id: workerId }));
-    } catch {
-      // 跳过坏记录。
-    }
-  }
-  out.sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));
-  return out;
 }
 
 function normalizeJobSummary(raw: unknown): JobSummary | null {
@@ -965,8 +948,8 @@ export interface ApiClient {
   getDataset(ref: string, signal?: AbortSignal): Promise<DatasetDetail>;
   /** POST /api/v1/workers/{id}/provision：请求设备配置环境（202 表示已入队）。 */
   provisionWorker(workerId: string, request: ProvisionRequest): Promise<ProvisionStatus>;
-  /** GET /api/v1/workers/{id}/provision：查询配置进度（新→旧）。接口未上线时抛 not_found。 */
-  getProvision(workerId: string, signal?: AbortSignal): Promise<ProvisionStatus[]>;
+  /** GET /api/v1/workers/{id}/provision：查询配置进度。接口未上线时抛 not_found。 */
+  getProvision(workerId: string, signal?: AbortSignal, requestId?: string): Promise<ProvisionStatus | null>;
   listJobs(options?: ListJobsOptions, signal?: AbortSignal): Promise<JobSummary[]>;
   getJob(jobId: string, signal?: AbortSignal): Promise<JobDetail>;
   getChatMessages(options?: ChatMessagesOptions, signal?: AbortSignal): Promise<ChatPage>;
@@ -1106,9 +1089,20 @@ export function createApiClient(baseUrlRaw: string, tokenRaw: string): ApiClient
       return normalizeProvisionStatus(raw, { worker_id: workerId, recipe: request.recipe });
     },
 
-    async getProvision(workerId: string, signal?: AbortSignal): Promise<ProvisionStatus[]> {
+    async getProvision(workerId: string, signal?: AbortSignal, requestId?: string): Promise<ProvisionStatus | null> {
       const raw = await requestJson("/workers/" + encodeURIComponent(workerId) + "/provision", { method: "GET" }, signal);
-      return normalizeProvisionList(raw, workerId);
+      const r = asRecord(raw);
+      if (r && Array.isArray(r.requests)) {
+        const entry = requestId
+          ? r.requests.find((item) => asRecord(item)?.id === requestId)
+          : r.requests[0];
+        if (!entry) {
+          if (requestId) throw new CefApiError("parse", "配置记录已不在最近历史中，请刷新状态。");
+          return null;
+        }
+        return normalizeProvisionStatus(entry, { worker_id: workerId });
+      }
+      return normalizeProvisionStatus(raw, { worker_id: workerId });
     },
 
     async listJobs(options: ListJobsOptions = {}, signal?: AbortSignal): Promise<JobSummary[]> {
@@ -1153,7 +1147,7 @@ export function createApiClient(baseUrlRaw: string, tokenRaw: string): ApiClient
       const r = asRecord(raw) ?? {};
       const saved = asStringArray(r.tags);
       return {
-        tags: saved.length > 0 ? saved : tags,
+        tags: Array.isArray(r.tags) ? saved : tags,
         // 后端字段名是 rejected_tags；兼容旧写法 rejected。
         rejected: asStringArray(r.rejected_tags ?? r.rejected),
       };

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type {
   ApiClient,
   ProvisionRecipe,
@@ -84,99 +84,90 @@ export function ProvisionPanel({
   const dryRunId = useId();
   const authorizedId = useId();
   const disabledHintId = useId();
-  const timerRef = useRef<number | undefined>(undefined);
-  const startedAtRef = useRef<number>(0);
-  const statusRef = useRef<ProvisionStatus | null>(initialStatus);
-  statusRef.current = status;
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const refreshRef = useRef(onRefresh);
+  refreshRef.current = onRefresh;
+  const mountedRef = useRef(false);
+  const requestPendingRef = useRef(false);
+  const active = status !== null && !isTerminal(status.state);
 
-  const stopPolling = useCallback(() => {
-    if (timerRef.current !== undefined) {
-      window.clearTimeout(timerRef.current);
-      timerRef.current = undefined;
-    }
-    setPolling(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
   }, []);
 
-  const pollOnce = useCallback(async () => {
-    try {
-      const list = await api.getProvision(worker.worker_id);
-      const current = statusRef.current;
-      const next = (current?.id ? list.find((item) => item.id === current.id) : undefined) ?? list[0] ?? null;
-      setError(null);
-      if (!next) {
-        stopPolling();
-        setNotice("设备还没有收到这条请求。确认设备在线、并且是最新版本的 worker。");
-        return;
-      }
-      setStatus(next);
-      if (isTerminal(next.state)) {
-        stopPolling();
-        onRefresh();
-        if (next.state === "succeeded") {
-          setNotice(next.dry_run ? "预演完成，这台设备可以跑这个配置。" : "设备已完成环境配置。");
-        } else if (refusedByDevice(next)) {
-          setNotice("设备拒绝执行：没有授权远程配置。");
-        } else {
-          setNotice("设备报告配置失败，请查看下面的日志。");
-        }
-        return;
-      }
-    } catch (cause) {
-      stopPolling();
-      setError(cause);
-      return;
-    }
-    if (Date.now() - startedAtRef.current > POLL_BUDGET_MS) {
-      stopPolling();
-      setNotice("已停止自动刷新。稍后点「刷新状态」继续查看。");
-      return;
-    }
-  }, [api, onRefresh, stopPolling, worker.worker_id]);
+  function completionNotice(next: ProvisionStatus): string {
+    if (next.state === "failed") return refusedByDevice(next) ? "设备拒绝执行：没有授权远程配置。" : "设备配置失败，请查看下面的日志。";
+    return next.dry_run ? "预演已完成，尚未安装或修改设备环境。" : "设备已完成环境配置。";
+  }
 
-  const startPolling = useCallback(() => {
-    stopPolling();
-    startedAtRef.current = Date.now();
+  // 已有配置请求也会恢复轮询；清理时取消在途读取，避免卸载后重新挂定时器。
+  useEffect(() => {
+    if (!online || (!active && refreshVersion === 0)) return;
+    const controller = new AbortController();
+    let timer: number | undefined;
+    const started = Date.now();
     setPolling(true);
-    const tick = (): void => {
-      timerRef.current = window.setTimeout(() => {
-        void pollOnce().then(() => {
-          timerRef.current = window.setTimeout(tick, POLL_MS);
-        });
-      }, POLL_MS);
+    const poll = async (): Promise<void> => {
+      try {
+        const next = await api.getProvision(worker.worker_id, controller.signal, status?.id || undefined);
+        if (controller.signal.aborted) return;
+        setStatus(next);
+        setError(null);
+        if (!next || isTerminal(next.state)) {
+          setPolling(false);
+          setNotice(next ? completionNotice(next) : "暂无配置记录。");
+          if (next) refreshRef.current();
+          return;
+        }
+        if (Date.now() - started >= POLL_BUDGET_MS) {
+          setPolling(false);
+          setNotice("已停止自动刷新。稍后点「刷新状态」继续查看。");
+          return;
+        }
+        timer = window.setTimeout(() => void poll(), POLL_MS);
+      } catch (cause) {
+        if (controller.signal.aborted) return;
+        setPolling(false);
+        setError(cause);
+      }
     };
-    tick();
-  }, [pollOnce, stopPolling]);
-
-  useEffect(() => () => {
-    if (timerRef.current !== undefined) window.clearTimeout(timerRef.current);
-  }, []);
+    void poll();
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [api, worker.worker_id, online, active, status?.id, refreshVersion]);
 
   async function request(runDry: boolean): Promise<void> {
-    if (requesting) return;
+    if (requestPendingRef.current || active || !online || !authorized) return;
+    requestPendingRef.current = true;
     setRequesting(true);
     setError(null);
     setNotice(null);
     try {
       const next = await api.provisionWorker(worker.worker_id, { recipe, dry_run: runDry });
+      if (!mountedRef.current) return;
       setStatus(next);
-      if (isTerminal(next.state)) {
-        setNotice(next.state === "succeeded" ? "设备已完成环境配置。" : "设备报告配置失败，请查看下面的日志。");
-      } else {
-        setNotice(runDry ? "已请求预演，设备处理中…" : "已请求，设备处理中…");
-        startPolling();
-      }
+      setNotice(isTerminal(next.state)
+        ? completionNotice(next)
+        : runDry ? "已请求预演，设备处理中…" : "已请求，设备处理中…");
+      if (isTerminal(next.state)) refreshRef.current();
     } catch (cause) {
-      setError(cause);
+      if (mountedRef.current) setError(cause);
     } finally {
-      setRequesting(false);
+      requestPendingRef.current = false;
+      if (mountedRef.current) setRequesting(false);
     }
   }
 
-  const canRequest = online && authorized && !requesting;
+  const canRequest = online && authorized && !requesting && !active;
   const disabledReason = !online
     ? "设备离线，无法请求远程配置。"
-    : !authorized
-      ? "需要设备所有者预先授权。"
+    : active
+      ? "该设备已有配置任务在跑，等它结束再试。"
+      : !authorized
+      ? "需要设备所有者预先授权：勾选下面的确认项才能请求。"
       : "";
   const refused = status ? refusedByDevice(status) : false;
 
@@ -240,8 +231,7 @@ export function ProvisionPanel({
           onClick={() => {
             setError(null);
             setNotice("正在读取配置状态…");
-            startedAtRef.current = Date.now();
-            void pollOnce();
+            setRefreshVersion((value) => value + 1);
           }}
           disabled={requesting || !online}
         >

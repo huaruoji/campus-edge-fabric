@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -27,6 +28,11 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--port", type=int, default=8080)
     serve.add_argument("--data", type=Path, default=None, help="data dir (default ./cef-data)")
     serve.add_argument("--token", default=None, help="shared bearer token (default: auto-generated)")
+    serve.add_argument(
+        "--token-file",
+        default=os.environ.get("CEF_TOKEN_FILE"),
+        help="file containing the bearer token (keeps it out of the process list)",
+    )
     serve.add_argument("--log-level", default="info")
 
     info = sub.add_parser("info", help="print data dir, token and db path")
@@ -46,6 +52,8 @@ def main(argv: list[str] | None = None) -> int:
             settings.data_dir = Path(args.data)
         if getattr(args, "token", None):
             settings.token = args.token
+        if getattr(args, "token_file", None):
+            settings.token = Path(args.token_file).read_text().strip()
         settings.host = getattr(args, "host", settings.host)
         settings.port = getattr(args, "port", settings.port)
         app = create_app(settings)

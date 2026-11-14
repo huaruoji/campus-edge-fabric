@@ -1,0 +1,23 @@
+[Unit]
+Description=Campus Edge Fabric coordinator (API + dashboard + scheduler)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/campus-edge-fabric
+Environment=CEF_TOKEN_FILE=/etc/cef/token
+Environment=CEF_DATA=/var/lib/cef
+ExecStart=/root/.local/bin/uv run --frozen --project /opt/campus-edge-fabric cef-coord serve --host 127.0.0.1 --port 8090 --data /var/lib/cef --token-file /etc/cef/token
+Restart=always
+RestartSec=3
+# the coordinator never needs to run user code; lock it down
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/cef
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

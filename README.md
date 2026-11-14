@@ -73,6 +73,27 @@ uv run cef ... job result <job_id> -o out.zip
 
 也可以直接用网页 `http://<coordinator>:8080/`（上传 → 看进度 → 下载）或 `/docs` 里的 OpenAPI。
 
+### 2.1 让 agent 帮你递交（可选，但很省事）
+
+三种方式操作同一个 API，权限完全一样：
+
+```bash
+# 1) 声明式递交（推荐，等价于 sbatch job.sh）
+uv run cef job submit --spec examples/job-thumbnail.json
+
+# 2) 任何 coding agent 都能直接跑 CLI（Claude Code / Codex 都能执行 bash）
+#    AGENTS.md 里已经写好它们该用哪些命令
+
+# 3) MCP：让 Claude Code / Codex 把 CEF 当成一组原生工具
+claude mcp add cef -- uv run --project "$PWD" cef mcp \
+  --server https://cef.huaruoji.com --token "$CEF_TOKEN"
+```
+
+MCP 暴露的工具：`list_workloads / list_workers / pool_stats / submit_job / job_status /
+watch_job / job_manifest / download_result / cancel_job / health`。
+
+Codex 的配置写在 `AGENTS.md` 第 2 节（`~/.codex/config.toml` 的 `[mcp_servers.cef]`）。
+
 ## 3. 仓库结构
 
 ```

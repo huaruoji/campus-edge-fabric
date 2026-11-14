@@ -1,0 +1,6 @@
+{
+  "workload": "blender",
+  "params": {"frames": "1-120", "samples": 32, "resolution": 50, "engine": "CYCLES"},
+  "name": "campus-animation",
+  "files": ["./input/scene.blend"]
+}

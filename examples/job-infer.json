@@ -1,0 +1,6 @@
+{
+  "workload": "infer",
+  "params": {"model": "yolo11n", "imgsz": 640, "conf": 0.25},
+  "name": "site-photo-detection",
+  "files": ["./input/*.jpg"]
+}

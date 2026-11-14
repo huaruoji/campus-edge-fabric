@@ -3,7 +3,7 @@ name = "cef-client"
 version = "0.1.0"
 description = "Campus Edge Fabric CLI (submit / watch / download) on top of the same HTTP API as the web UI"
 requires-python = ">=3.11"
-dependencies = ["cef-protocol"]
+dependencies = ["cef-protocol", "mcp>=1.2"]
 
 [project.scripts]
 cef = "cef_client.__main__:main"

@@ -1,0 +1,7 @@
+{
+  "workload": "thumbnail",
+  "params": {"size": 512, "fmt": "webp", "quality": 80},
+  "name": "deck-thumbnails",
+  "files": ["./input/*.jpg"],
+  "required_tag": null
+}

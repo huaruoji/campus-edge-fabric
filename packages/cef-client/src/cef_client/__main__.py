@@ -1,4 +1,4 @@
-"""\`cef\` — the third client of the same service (web / HTTP / CLI).
+"""The `cef` CLI — the third client of the same service (web / HTTP / CLI).
 
     cef --server http://host:8080 --token T workers
     cef --server ... job submit --workload thumbnail --params '{"size":512}' *.jpg
@@ -12,6 +12,7 @@ nothing after the first export.
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
 import sys
@@ -22,6 +23,17 @@ from cef_protocol import CefClient
 from cef_protocol.states import JobState
 
 
+def _expand(patterns: list[str]) -> list[Path]:
+    """Expand shell globs ourselves so agents can pass patterns without a shell."""
+    out: list[Path] = []
+    for pattern in patterns:
+        if any(ch in pattern for ch in "*?["):
+            out.extend(Path(p) for p in sorted(glob.glob(pattern)))
+        else:
+            out.append(Path(pattern))
+    return [p for p in out if p.is_file()]
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="cef", description="Campus Edge Fabric client")
     p.add_argument("--server", default=os.environ.get("CEF_SERVER", "http://127.0.0.1:8080"))
@@ -30,6 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("doctor", help="health check + registered workloads")
+    sub.add_parser("mcp", help="run as an MCP server over stdio (Claude Code / Codex / any MCP client)")
     sub.add_parser("workers", help="list devices")
     st = sub.add_parser("stats", help="pool statistics")
     st.add_argument("--window", type=int, default=300)
@@ -39,13 +52,14 @@ def build_parser() -> argparse.ArgumentParser:
     job = sub.add_parser("job", help="job operations")
     jsub = job.add_subparsers(dest="jcmd", required=True)
 
-    submit = jsub.add_parser("submit", help="submit a new job")
-    submit.add_argument("--workload", required=True)
-    submit.add_argument("--params", default="{}", help="JSON params, e.g. '{\"size\":256}'")
+    submit = jsub.add_parser("submit", help="submit a new job (sbatch equivalent)")
+    submit.add_argument("--spec", default=None, help="job.json with workload/params/files (declarative, versionable)")
+    submit.add_argument("--workload", default=None)
+    submit.add_argument("--params", default=None, help="JSON params, e.g. '{\"size\":256}'")
     submit.add_argument("--name", default=None)
     submit.add_argument("--priority", type=int, default=0)
     submit.add_argument("--required-tag", default=None, help="pin to devices with this tag")
-    submit.add_argument("files", nargs="+")
+    submit.add_argument("files", nargs="*", help="input files or globs")
 
     ls = jsub.add_parser("ls", help="list jobs")
     ls.add_argument("--limit", type=int, default=20)
@@ -125,13 +139,26 @@ def cmd_workloads(c: CefClient, args: argparse.Namespace) -> int:
 
 def cmd_job(c: CefClient, args: argparse.Namespace) -> int:
     if args.jcmd == "submit":
+        spec: dict = {}
+        if args.spec:
+            spec = json.loads(Path(args.spec).read_text())
+        workload = args.workload or spec.get("workload")
+        if not workload:
+            print("error: --workload or a spec file with 'workload' is required", file=sys.stderr)
+            return 2
+        params = json.loads(args.params) if args.params else dict(spec.get("params") or {})
+        raw_files = args.files or spec.get("files") or []
+        paths = _expand(raw_files)
+        if not paths:
+            print("error: no input files", file=sys.stderr)
+            return 2
         created = c.submit_job(
-            [Path(f) for f in args.files],
-            args.workload,
-            json.loads(args.params),
-            name=args.name,
-            priority=args.priority,
-            required_tag=args.required_tag,
+            paths,
+            workload,
+            params,
+            name=args.name or spec.get("name"),
+            priority=args.priority or int(spec.get("priority") or 0),
+            required_tag=args.required_tag or spec.get("required_tag"),
         )
         if args.json:
             print(created.model_dump_json())
@@ -185,6 +212,12 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_workloads(client, args)
         if args.cmd == "job":
             return cmd_job(client, args)
+        if args.cmd == "mcp":
+            from .mcp_server import run as run_mcp
+
+            client.close()
+            run_mcp(args.server, args.token)
+            return 0
         return 2
     except KeyboardInterrupt:
         return 130

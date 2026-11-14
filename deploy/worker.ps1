@@ -21,7 +21,8 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
   $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
 }
 
-uv sync --all-packages --extra infer | Out-Null
+# worker + CLI only (a teammate's laptop both computes and submits)
+uv sync --package cef-worker --package cef-client --extra all | Out-Null
 if ($Tags) {
   uv run cef-worker run --server $Server --token $Token --name $Name --slots $Slots --workloads $Workloads --tags $Tags
 } else {

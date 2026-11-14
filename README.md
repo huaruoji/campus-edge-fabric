@@ -31,7 +31,24 @@ stats: tasks/min 6.0  p50 0.041s  retries 0
 - **能力/标签匹配**：任务只能被装有对应 workload 的设备领取；`required_tag` 可把任务钉在指定设备（基准测试用）
 - **自适应批量**：`capacity = target_lease_s / EWMA(单任务耗时)`，并按 CPU/GPU 负载收敛，避免把 20 个长任务塞给一台机器
 
-## 2. 5 分钟跑起来
+## 2. 安装矩阵：一次装、按角色启动
+
+同一套代码，四个入口；`deploy/install.sh` 只装这个角色需要的东西（不会把 onnxruntime 塞给只做缩略图的机器）：
+
+| 角色 | 命令 | 装了什么 | 启动 |
+|---|---|---|---|
+| 控制面 | `./deploy/install.sh --role coordinator` | FastAPI + 调度器 + 仪表盘 + CLI | `./.venv/bin/cef-coord serve --host 0.0.0.0 --port 8080` |
+| 设备 | `./deploy/install.sh --role worker --extra infer` | agent + CLI（+ onnxruntime） | `./.venv/bin/cef-worker run --server <url> --token <t>` |
+| 提交端 | `./deploy/install.sh --role client` | `cef` CLI + MCP server | `./.venv/bin/cef doctor` |
+| 开发机 | `./deploy/install.sh --role all` | 全部 + 所有 workload 依赖 | 随意 |
+
+**Worker 机器同时带 CLI**——队友的笔记本既是算力，也是提交端，不需要装两遍。
+（远端的 VPS 上 coordinator 用的是 `.venv/bin/cef-coord` 直接启动，见 `deploy/vps/INSTANCE.md`。）
+
+**关于 agent 接入**：MCP 是这个领域的现行标准（Claude Code / Codex / Cursor 都支持），但它是**可选的第二入口**——
+所有能力在 CLI 上都能做（coding agent 本质就是会跑 bash）。MCP 只是让 agent 少写几层 shell 拼接，装不装都能全覆盖。
+
+## 3. 5 分钟跑起来
 
 要求：Python ≥ 3.11，[uv](https://docs.astral.sh/uv/)。
 
@@ -73,7 +90,7 @@ uv run cef ... job result <job_id> -o out.zip
 
 也可以直接用网页 `http://<coordinator>:8080/`（上传 → 看进度 → 下载）或 `/docs` 里的 OpenAPI。
 
-### 2.1 让 agent 帮你递交（可选，但很省事）
+### 3.1 让 agent 帮你递交（可选，但很省事）
 
 三种方式操作同一个 API，权限完全一样：
 
@@ -94,7 +111,7 @@ watch_job / job_manifest / download_result / cancel_job / health`。
 
 Codex 的配置写在 `AGENTS.md` 第 2 节（`~/.codex/config.toml` 的 `[mcp_servers.cef]`）。
 
-## 3. 仓库结构
+## 4. 仓库结构
 
 ```
 packages/
@@ -108,7 +125,7 @@ deploy/               一键启动脚本（sh / ps1）
 docs/                 api.md（接口契约）、architecture.md（设计取舍）
 ```
 
-## 4. 关键设计取舍
+## 5. 关键设计取舍
 
 | 决定 | 为什么 |
 |---|---|
@@ -121,7 +138,7 @@ docs/                 api.md（接口契约）、architecture.md（设计取舍�
 
 细节见 [docs/architecture.md](docs/architecture.md) 和 [docs/api.md](docs/api.md)。
 
-## 5. 实验怎么测（比赛硬指标）
+## 6. 实验怎么测（比赛硬指标）
 
 ```bash
 # 每台设备先注册一个唯一 tag，用来做单机基线
@@ -143,7 +160,7 @@ uv run python benchmarks/bench.py \
 
 结果写到 `benchmarks/results/`（JSON + Markdown 表格，可直接贴进材料）。
 
-## 6. 分工建议（4 人）
+## 7. 分工建议（4 人）
 
 | 人 | 负责 | 目录 |
 |---|---|---|
@@ -160,7 +177,7 @@ Coordinator/Worker 对接请先读 [固定契约 v1](docs/worker-contract-v1.md)
 共享模型快照为 [worker-schema-v1.json](docs/worker-schema-v1.json)，契约测试随 `pytest` 执行。
 此前的五份任务 Markdown 保存在 [历史排期目录](docs/team-plan/)；其中 OCR 和旧路径草案不覆盖当前仓库协议。
 
-## 7. 未完成 / 明确声明
+## 8. 未完成 / 明确声明
 
 - **模型文件不随仓库分发**：`infer` 需要把 `*.onnx` 放到 `~/.cef/models/`（或 `--model-dir`）
 - `blender` adapter 需要在每台设备预装 Blender（版本尽量一致），当前只做了逐帧渲染路径

@@ -1,4 +1,4 @@
-"""\`cef-worker\` command line.
+"""The `cef-worker` command line.
 
     cef-worker run --server http://192.168.1.10:8080 --token XXX
     cef-worker doctor --server http://192.168.1.10:8080 --token XXX

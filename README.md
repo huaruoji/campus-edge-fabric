@@ -148,6 +148,8 @@ docs/                 api.md（接口契约）、architecture.md（设计取舍�
 
 **D 的已完成实验：[测试入口](docs/testing/README.md) · [Procedure](docs/testing/thumbnail-procedure.md) · [2026-11-14 Report](docs/testing/thumbnail-report-2026-11-14.md)。** 本次固定 thumbnail 对照完成 9 轮正式测量，900 个输出全部校验通过；双 Worker 中位吞吐 3.3055 images/s，相对最快单 Worker 提高 26.17%。该数据为包含上传与下载的服务吞吐，完整设备信息与限制见报告。复跑本次设计请用 `benchmarks/thumbnail/`，下方保留通用基准脚本的用法。
 
+**双 GPU infer：[Procedure](docs/testing/infer-procedure.md) · [报告与图表](docs/testing/infer-2026-11-14/report.md)。** 已完成三规模、三条件、三次重复的 27 轮诊断对照。110 张批次的单机 jochi / 单机 liusic / 双机耗时中位数为 70.08 / 79.05 / 37.50 秒。1350 个正式输出中 1260 个通过固定 CPU 数值参考，未通过项保留在报告中；这是诊断性结果，完整数值一致性验收尚未通过。CPU 与 GPU 测试统一收录在上述测试入口。
+
 ```bash
 # 每台设备先注册一个唯一 tag，用来做单机基线
 ./deploy/worker.sh ... --tags bench-pc1

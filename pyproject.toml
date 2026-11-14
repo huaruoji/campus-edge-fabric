@@ -1,0 +1,32 @@
+[project]
+name = "campus-edge-fabric"
+version = "0.1.0"
+description = "Campus Edge Fabric - personal devices as a distributed compute service"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.2",
+  "pytest-timeout>=2.3",
+  "ruff>=0.6",
+]
+
+[tool.ruff]
+line-length = 150
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["packages"]
+timeout = 120
+addopts = "-q"

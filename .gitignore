@@ -1,0 +1,30 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.ruff_cache/
+.pytest_cache/
+
+# runtime data: never commit job payloads, sqlite or tokens
+cef-data/
+data/
+*.db
+*.db-wal
+*.db-shm
+.env
+token
+
+# node
+node_modules/
+web/dist/
+.vite/
+
+# benchmark artifacts
+benchmarks/results/*.zip
+benchmarks/results/*.json
+
+# os
+.DS_Store
+Thumbs.db

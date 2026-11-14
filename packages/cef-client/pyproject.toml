@@ -1,0 +1,19 @@
+[project]
+name = "cef-client"
+version = "0.1.0"
+description = "Campus Edge Fabric CLI (submit / watch / download) on top of the same HTTP API as the web UI"
+requires-python = ">=3.11"
+dependencies = ["cef-protocol"]
+
+[project.scripts]
+cef = "cef_client.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cef_client"]
+
+[tool.uv.sources]
+cef-protocol = { workspace = true }

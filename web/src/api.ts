@@ -230,14 +230,14 @@ export function toUserMessage(error: unknown): UserMessage {
   if (error instanceof CefApiError) {
     if (error.status === 503 && error.code === "agent_unavailable") {
       return {
-        title: "AI 助手暂不可用，请在下方手动选择参数",
-        detail: "当前 Coordinator 尚未配置 AI 助手。",
+        title: "AI 助手暂不可用",
+        detail: "当前 Coordinator 尚未配置 AI 助手。请联系管理员。",
       };
     }
     if (error.status === 502 && error.code === "agent_error") {
       return {
         title: "AI 助手连接模型服务失败",
-        detail: "请稍后重新发送，或在下方手动选择参数。",
+        detail: "请稍后重新发送。",
       };
     }
     switch (error.kind) {

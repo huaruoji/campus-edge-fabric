@@ -1,130 +1,189 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
-import type { AgentChatResponse, ApiClient, ChatMessage, JobSpec, SubmitResponse, Workload } from "../api";
-import { formatNumber } from "../format";
-import { ErrorBox, LoadingLine } from "./ui";
+import type { AgentToolTrace, ApiClient, ChatMessage } from "../api";
+import { CefApiError } from "../api";
+import { ErrorBox, LoadingLine, Section } from "./ui";
 import "../chat.css";
 
-const MAX_MESSAGES = 12;
-const MAX_MESSAGE_LENGTH = 4000;
-const WORKLOAD_LABELS: Record<string, string> = {
-  thumbnail: "图片缩略图",
-  infer: "图片目标检测",
-  blender: "Blender 动画渲染",
-};
-const UNIT_LABELS: Record<string, string> = { images: "张", frames: "帧", tasks: "个任务" };
-const PARAM_LABELS: Record<string, string> = {
-  size: "尺寸",
-  fmt: "格式",
-  quality: "质量",
-  model: "模型",
-  imgsz: "输入尺寸",
-  conf: "置信度",
-  max_det: "检测上限",
-  frames: "帧范围",
-  resolution: "分辨率比例",
-  samples: "采样数",
-  engine: "渲染引擎",
-};
+const MAX_CONTEXT = 12;
+const MAX_HISTORY = 100;
+const DEMO_COUNT = 12;
+const DEMO_PROMPT = "用内置样本跑一次多设备协作演示。把 12 个样本处理为长边 512 像素的 WebP，调用 preview_job 准备任务，我会在任务详情查看每台设备的完成量。";
 
-interface Props {
-  api: ApiClient;
-  files: readonly File[];
-  workloads: readonly Workload[];
-  submitJob: (spec: JobSpec) => Promise<SubmitResponse>;
-  submitting: boolean;
-  onSubmitted: (jobId: string) => void;
+interface Entry {
+  id: string;
+  role: ChatMessage["role"] | "status";
+  content: string;
+  trace?: AgentToolTrace[];
+  jobId?: string;
 }
 
-interface ConversationMessage extends ChatMessage {
-  id: number;
+function entryId(): string {
+  return Array.from(crypto.getRandomValues(new Uint32Array(4)), (part) => part.toString(16).padStart(8, "0")).join("");
 }
 
-interface ChatResult {
-  response: AgentChatResponse;
-  files: readonly File[];
+function readHistory(key: string): Entry[] {
+  try {
+    const entries: unknown = JSON.parse(localStorage.getItem(key) ?? "[]");
+    if (!Array.isArray(entries)) return [];
+    return entries.filter((entry) =>
+      entry && typeof entry.id === "string" && typeof entry.content === "string" &&
+      ["user", "assistant", "status"].includes(entry.role)
+    ).slice(-MAX_HISTORY);
+  } catch {
+    return [];
+  }
 }
 
-export function JobChat({ api, files, workloads, submitJob, submitting, onSubmitted }: Props) {
+async function historyKey(baseUrl: string, token: string): Promise<string | null> {
+  if (!window.crypto?.subtle) return null;
+  const bytes = new TextEncoder().encode(JSON.stringify([baseUrl, token.trim()]));
+  const hash = await window.crypto.subtle.digest("SHA-256", bytes);
+  const hex = Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return "cef.assistant.history." + hex;
+}
+
+async function makeDemoFiles(): Promise<File[]> {
+  const canvas = document.createElement("canvas");
+  canvas.width = 640;
+  canvas.height = 480;
+  const paint = canvas.getContext("2d");
+  if (!paint) throw new Error("无法生成演示样本，请刷新页面后重试。");
+  const files: File[] = [];
+  for (let index = 0; index < DEMO_COUNT; index += 1) {
+    paint.fillStyle = `hsl(${index * 30} 45% 30%)`;
+    paint.fillRect(0, 0, canvas.width, canvas.height);
+    paint.fillStyle = "#d8e5ff";
+    paint.fillRect(20 + index * 13, 120, 220, 180);
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((result) => {
+        if (result) resolve(result);
+        else reject(new Error("无法生成演示样本，请刷新页面后重试。"));
+      }, "image/png");
+    });
+    files.push(new File([blob], `cef-demo-${index + 1}.png`, { type: blob.type }));
+  }
+  return files;
+}
+
+export function JobChat({ api, token }: { api: ApiClient; token: string }) {
   const [draft, setDraft] = useState("");
-  const [messages, setMessages] = useState<ConversationMessage[]>([]);
-  const [result, setResult] = useState<ChatResult | null>(null);
-  const [waiting, setWaiting] = useState(false);
-  const [confirming, setConfirming] = useState(false);
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [storageKey, setStorageKey] = useState<string | null>(null);
+  const [pending, setPending] = useState<"chat" | "demo" | null>(null);
   const [error, setError] = useState<unknown>(null);
-  const messageId = useRef(0);
   const request = useRef<AbortController | null>(null);
-  const submissionGeneration = useRef(0);
   const transcript = useRef<HTMLDivElement>(null);
-  const titleId = useId();
-  const hintId = useId();
   const composerId = useId();
 
-  const stalePreview = Boolean(result?.response.preview && result.files !== files);
-  const preview = stalePreview ? null : result?.response.preview;
-  const toolTrace = result?.response.tool_trace;
-  const workloadUnit = preview && workloads.find((item) => item.kind === preview.workload)?.unit;
-  const unit = workloadUnit ?? (preview?.workload === "blender" ? "frames" : "images");
-  const fileHint = files.length === 0
-    ? "请先添加输入文件，再发送需求以更新预览。"
-    : preview?.workload === "blender" && (files.length !== 1 || !/\.blend$/i.test(files[0].name))
-      ? "Blender 渲染需要且仅需一个 .blend 文件。"
-      : "";
-  const visibleMessages = waiting ? messages.slice(-(MAX_MESSAGES - 1)) : messages;
-
-  useLayoutEffect(() => {
-    setDraft("");
-    setMessages([]);
-    setResult(null);
-    setError(null);
-    setConfirming(false);
-    return () => { submissionGeneration.current += 1; };
-  }, [api]);
-
-  useLayoutEffect(() => {
-    setWaiting(false);
+  useEffect(() => {
+    let active = true;
+    void historyKey(api.baseUrl, token).catch(() => null).then((key) => {
+      if (!active) return;
+      setStorageKey(key);
+      setEntries(key ? readHistory(key) : []);
+      setLoaded(true);
+    });
     return () => {
+      active = false;
       request.current?.abort();
-      request.current = null;
     };
-  }, [api, files]);
+  }, [api.baseUrl, token]);
 
   useEffect(() => {
     const container = transcript.current;
     if (container) container.scrollTop = container.scrollHeight;
-  }, [messages, waiting]);
+  }, [entries, pending]);
 
-  async function sendMessage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const content = draft.trim();
-    if (!content || request.current || submitting) return;
+  function updateHistory(next: Entry[]) {
+    const recent = next.slice(-MAX_HISTORY);
+    setEntries(recent);
+    if (!storageKey) return;
+    try {
+      if (recent.length) localStorage.setItem(storageKey, JSON.stringify(recent));
+      else localStorage.removeItem(storageKey);
+    } catch {
+      setStorageKey(null);
+    }
+  }
+
+  async function send(mode: "chat" | "demo") {
+    const content = mode === "demo" ? DEMO_PROMPT : draft.trim();
+    if (!content || !loaded || request.current) return;
 
     const controller = new AbortController();
     request.current = controller;
-    const user: ConversationMessage = { id: messageId.current++, role: "user", content };
-    const nextMessages = [...messages, user].slice(-MAX_MESSAGES);
-
+    let next: Entry[] = [...entries, { id: entryId(), role: "user", content }];
+    updateHistory(next);
+    setPending(mode);
     setError(null);
-    setResult(null);
-    setWaiting(true);
+    if (mode === "chat") setDraft("");
+
     try {
+      const files = mode === "demo" ? await makeDemoFiles() : [];
+      if (controller.signal.aborted) return;
+      const messages = next.flatMap(({ role, content }): ChatMessage[] =>
+        role === "status" ? [] : [{ role, content }]
+      ).slice(-MAX_CONTEXT);
       const response = await api.chat({
-        messages: nextMessages.map(({ role, content }) => ({ role, content })),
+        messages,
         context: { files: files.map(({ name, size }) => ({ name, size })) },
       }, controller.signal);
       if (controller.signal.aborted) return;
-      const assistant: ConversationMessage = { id: messageId.current++, role: "assistant", content: response.reply };
-      setMessages([...nextMessages, assistant].slice(-MAX_MESSAGES));
-      setDraft("");
-      setResult({ response, files });
+      next = [...next, {
+        id: entryId(),
+        role: "assistant",
+        content: response.reply,
+        trace: response.tool_trace,
+      }];
+      updateHistory(next);
+
+      if (mode === "demo") {
+        const preview = response.preview;
+        if (
+          preview?.workload !== "thumbnail" || preview.task_count !== files.length ||
+          preview.params.size !== 512 || preview.params.fmt !== "webp" ||
+          !response.tool_trace.some((step) => step.name === "preview_job" && step.ok)
+        ) {
+          throw new CefApiError("invalid", "助手未返回与演示匹配的任务预览。请重新运行演示。");
+        }
+        const job = await api.submitJob({
+          name: "算力池协作演示",
+          workload: preview.workload,
+          params: preview.params,
+          inputs: files.map(({ name }) => ({ name })),
+        }, files);
+        if (controller.signal.aborted) return;
+        updateHistory([...next, {
+          id: entryId(),
+          role: "status",
+          content: `已向算力池提交 ${job.total ?? files.length} 个任务，在线设备会按能力领取。`,
+          jobId: job.job_id,
+        }]);
+      }
     } catch (cause) {
-      if (!controller.signal.aborted) setError(cause);
+      if (!controller.signal.aborted) {
+        setError(cause);
+        if (mode === "demo") {
+          updateHistory([...next, {
+            id: entryId(),
+            role: "status",
+            content: "本次演示未收到任务创建确认。可先查看任务列表，再决定是否重试。",
+          }]);
+        }
+      }
     } finally {
       if (request.current === controller) {
         request.current = null;
-        setWaiting(false);
+        if (!controller.signal.aborted) setPending(null);
       }
     }
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void send("chat");
   }
 
   function handleComposerKey(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -133,131 +192,79 @@ export function JobChat({ api, files, workloads, submitJob, submitting, onSubmit
     event.currentTarget.form?.requestSubmit();
   }
 
-  async function confirmPreview() {
-    if (!preview || fileHint || submitting || waiting) return;
-    const generation = submissionGeneration.current;
-    setConfirming(true);
-    setError(null);
-    try {
-      const job = await submitJob({
-        workload: preview.workload,
-        params: preview.params,
-        inputs: files.map(({ name }) => ({ name })),
-      });
-      if (generation === submissionGeneration.current) onSubmitted(job.job_id);
-    } catch (cause) {
-      if (generation === submissionGeneration.current) setError(cause);
-    } finally {
-      if (generation === submissionGeneration.current) setConfirming(false);
-    }
-  }
-
   return (
-    <section className="job-chat" aria-labelledby={titleId}>
-      <div className="job-chat-head">
-        <h3 id={titleId}>用一句话提交</h3>
-        <p>告诉 AI 助手怎么处理这些文件，确认预览后再提交。</p>
-      </div>
-
-      <div className="job-chat-transcript" ref={transcript} role="log" aria-label="聊天记录" tabIndex={0}>
-        {visibleMessages.length > 0 || waiting ? (
-          <ol className="job-chat-messages">
-            {visibleMessages.map((message) => (
-              <li key={message.id} className={"job-chat-message job-chat-message--" + message.role}>
-                <span className="job-chat-role">{message.role === "user" ? "你" : "AI 助手"}</span>
-                <p>{message.content}</p>
-              </li>
-            ))}
-            {waiting ? (
-              <li className="job-chat-message job-chat-message--user">
-                <span className="job-chat-role">你</span>
-                <p>{draft.trim()}</p>
-              </li>
-            ) : null}
-          </ol>
-        ) : null}
-        {waiting ? <LoadingLine text="AI 助手正在处理…" /> : null}
-      </div>
-
-      <form className="job-chat-form" onSubmit={sendMessage}>
-        <label htmlFor={composerId} className="field-label">描述你想做的任务</label>
-        <textarea
-          id={composerId}
-          aria-describedby={hintId}
-          className="textarea"
-          value={draft}
-          rows={2}
-          maxLength={MAX_MESSAGE_LENGTH}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={handleComposerKey}
-          readOnly={waiting}
-          placeholder="把这批图压成 512 的 WebP"
-        />
-        <div className="job-chat-composer-actions">
-          <span className="field-hint" id={hintId}>仅保留最近 {MAX_MESSAGES} 条消息</span>
-          <button type="submit" className="btn btn--primary" disabled={!draft.trim() || waiting || submitting}>
-            {waiting ? "发送中…" : "发送"}
+    <Section title="算力助手">
+      <div className="job-chat">
+        <div className="job-chat-demo">
+          <div>
+            <h3>演示任务</h3>
+            <p>处理 12 个内置样本，查看每台设备完成了多少任务。</p>
+          </div>
+          <button type="button" className="btn btn--primary" disabled={!loaded || pending !== null} onClick={() => void send("demo")}>
+            提交演示任务
           </button>
         </div>
-      </form>
 
-      {error ? <ErrorBox error={error} /> : null}
-      {stalePreview ? (
-        <p className="job-chat-note" role="status">文件列表已更新。请重新发送需求，生成新的任务预览。</p>
-      ) : null}
+        {entries.length > 0 ? (
+          <div className="job-chat-transcript" ref={transcript} role="log" aria-label="聊天记录" tabIndex={0}>
+            <ol className="job-chat-messages">
+              {entries.map((entry) => (
+                <li key={entry.id} className={`job-chat-message job-chat-message--${entry.role}`}>
+                  <span className="job-chat-role">{entry.role === "user" ? "你" : entry.role === "assistant" ? "算力助手" : "任务状态"}</span>
+                  <p>{entry.content}</p>
+                  {entry.jobId ? <a href={`#/jobs/${encodeURIComponent(entry.jobId)}`}>查看任务详情</a> : null}
+                  {entry.trace?.length ? (
+                    <details className="job-chat-trace">
+                      <summary>工具调用记录（{entry.trace.length}）</summary>
+                      <ol>
+                        {entry.trace.map((step, index) => (
+                          <li key={index}>
+                            <div className="job-chat-tool-head">
+                              <code>{step.name}</code>
+                              <span className={step.ok ? "job-chat-tool-ok" : "job-chat-tool-error"}>{step.ok ? "成功" : "失败"}</span>
+                            </div>
+                            {step.summary ? <p>{step.summary}</p> : null}
+                          </li>
+                        ))}
+                      </ol>
+                    </details>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
+        {pending ? <div role="status"><LoadingLine text={pending === "demo" ? "正在准备并提交演示任务…" : "算力助手正在处理…"} /></div> : null}
+        {error ? <ErrorBox error={error} /> : null}
 
-      {preview ? (
-        <div className="job-chat-preview">
-          <div className="job-chat-preview-head">
-            <h4>任务预览</h4>
-            <span className="job-chat-count">
-              {preview.task_count === null ? "待确定任务数" : formatNumber(preview.task_count) + " " + (UNIT_LABELS[unit] ?? unit)}
+        <form className="job-chat-form" onSubmit={handleSubmit}>
+          <label htmlFor={composerId} className="field-label">给算力助手发消息</label>
+          <textarea
+            id={composerId}
+            className="textarea"
+            value={draft}
+            rows={3}
+            maxLength={4000}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={handleComposerKey}
+            placeholder="比如：目前有哪些设备在线？"
+          />
+          <div className="job-chat-composer-actions">
+            <span className="field-hint">
+              {storageKey ? "聊天记录保存在此浏览器" : "聊天记录仅保留在当前页面"} · 每次发送最近 12 条消息
             </span>
-          </div>
-          <dl className="job-chat-preview-fields">
-            <div>
-              <dt>工作负载</dt>
-              <dd>{WORKLOAD_LABELS[preview.workload] ?? preview.workload} <code>{preview.workload}</code></dd>
+            <div className="job-chat-buttons">
+              {entries.length ? (
+                <button type="button" className="btn btn--ghost" disabled={pending !== null} onClick={() => {
+                  updateHistory([]);
+                  setError(null);
+                }}>清空记录</button>
+              ) : null}
+              <button type="submit" className="btn" disabled={!loaded || !draft.trim() || pending !== null}>发送</button>
             </div>
-            {Object.entries(preview.params).map(([name, value]) => (
-              <div key={name}>
-                <dt>{PARAM_LABELS[name] ?? name}</dt>
-                <dd className="mono">{typeof value === "string" ? value : JSON.stringify(value)}</dd>
-              </div>
-            ))}
-          </dl>
-          {preview.note ? <p className="job-chat-note">{preview.note}</p> : null}
-          <div className="job-chat-preview-actions">
-            {fileHint ? <span className="field-hint">{fileHint}</span> : null}
-            <button
-              type="button"
-              className="btn btn--primary"
-              disabled={Boolean(fileHint) || submitting || waiting}
-              onClick={confirmPreview}
-            >
-              {confirming ? "提交中…" : "确认提交"}
-            </button>
           </div>
-        </div>
-      ) : null}
-
-      {toolTrace?.length ? (
-        <details className="job-chat-trace">
-          <summary>工具调用记录（{toolTrace.length}）</summary>
-          <ol>
-            {toolTrace.map((step, index) => (
-              <li key={index}>
-                <div className="job-chat-tool-head">
-                  <code>{step.name}</code>
-                  <span className={step.ok ? "job-chat-tool-ok" : "job-chat-tool-error"}>{step.ok ? "成功" : "失败"}</span>
-                </div>
-                {step.summary ? <p>{step.summary}</p> : null}
-                {Object.keys(step.args).length > 0 ? <pre>{JSON.stringify(step.args, null, 2)}</pre> : null}
-              </li>
-            ))}
-          </ol>
-        </details>
-      ) : null}
-    </section>
+        </form>
+      </div>
+    </Section>
   );
 }

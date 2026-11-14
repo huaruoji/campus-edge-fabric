@@ -5,7 +5,7 @@ import { usePolling } from "./hooks/usePolling";
 import { ConnectionBar } from "./components/ConnectionBar";
 import { StatsStrip } from "./components/StatsStrip";
 import { WorkerPanel } from "./components/WorkerPanel";
-import { JobSubmitForm } from "./components/JobSubmitForm";
+import { JobChat } from "./components/JobChat";
 import { JobList } from "./components/JobList";
 import { JobDetail } from "./components/JobDetail";
 import { EmptyBox } from "./components/ui";
@@ -14,7 +14,7 @@ type Route = { name: "devices" } | { name: "submit" } | { name: "jobs" } | { nam
 
 const ROUTE_TITLES: Record<Route["name"], string> = {
   devices: "设备面板",
-  submit: "提交任务",
+  submit: "算力助手",
   jobs: "任务列表",
   job: "任务详情",
 };
@@ -37,6 +37,7 @@ function parseRoute(hash: string): Route {
 export default function App() {
   const [settings, setSettings] = useState<ConnectionSettings>(() => loadSettings());
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.hash));
+  const [connectionVersion, setConnectionVersion] = useState(0);
   const mainRef = useRef<HTMLElement>(null);
   const focusOnNavigation = useRef(false);
 
@@ -66,11 +67,13 @@ export default function App() {
   const workers = usePolling((signal) => api.getWorkers(signal), 3000, ready, [api]);
   const stats = usePolling((signal) => api.getStats(300, signal), 5000, ready, [api]);
   const jobs = usePolling((signal) => api.listJobs({ limit: 50 }, signal), 5000, ready, [api]);
-  const workloads = usePolling((signal) => api.getWorkloads(signal), 20000, ready, [api]);
   const health = usePolling((signal) => api.getHealth(signal), 10000, ready, [api]);
 
   function applySettings(next: ConnectionSettings) {
     const normalized = { baseUrl: next.baseUrl, token: next.token };
+    if (normalized.baseUrl !== settings.baseUrl || normalized.token !== settings.token) {
+      setConnectionVersion((version) => version + 1);
+    }
     setSettings(normalized);
     saveSettings(normalized);
   }
@@ -80,7 +83,6 @@ export default function App() {
     workers.refresh();
     stats.refresh();
     jobs.refresh();
-    workloads.refresh();
   }
 
   function navigate(hash: string) {
@@ -133,7 +135,7 @@ export default function App() {
           设备面板
         </a>
         <a className={"tab" + (activeTab === "submit" ? " tab--active" : "")} href="#/submit" aria-current={activeTab === "submit" ? "page" : undefined}>
-          提交任务
+          算力助手
         </a>
         <a className={"tab" + (activeTab === "jobs" ? " tab--active" : "")} href="#/jobs" aria-current={activeTab === "jobs" ? "page" : undefined}>
           任务列表
@@ -162,11 +164,7 @@ export default function App() {
             <WorkerPanel workers={workers} api={api} onRefresh={workers.refresh} hideError={repeatsBanner(workers.error)} />
           </>
         ) : route.name === "submit" ? (
-          <JobSubmitForm
-            api={api}
-            workloads={workloads}
-            onSubmitted={(jobId) => navigate("#/jobs/" + encodeURIComponent(jobId))}
-          />
+          <JobChat key={connectionVersion} api={api} token={settings.token} />
         ) : route.name === "jobs" ? (
           <JobList
             jobs={jobs}

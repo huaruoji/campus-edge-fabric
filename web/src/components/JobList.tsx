@@ -51,7 +51,7 @@ export function JobList({ jobs, onRefresh, hideError = false }: Props) {
             刷新
           </button>
           <a className="btn btn--sm btn--primary" href="#/submit">
-            提交任务
+            打开算力助手
           </a>
         </>
       }

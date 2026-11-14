@@ -207,3 +207,19 @@ def test_stop_keeps_heartbeat_until_slow_real_task_finishes(pool, tmp_path, stop
     finally:
         agent._stop.set()
         thread.join(timeout=10)
+
+
+def test_worker_restart_reuses_device_identity(pool, tmp_path):
+    http, launch, _, _ = pool
+    first = launch("persistent")
+    until(lambda: (tmp_path / "persistent/worker.id").exists())
+    worker_id = (tmp_path / "persistent/worker.id").read_text().strip()
+    first.terminate()
+    first.wait(timeout=10)
+    assert http.post(f"/api/v1/workers/{worker_id}/drain").status_code == 202
+    launch("persistent")
+    until(lambda: any(w["worker_id"] == worker_id and w["state"] == "online"
+                      for w in http.get("/api/v1/workers").json()["workers"]))
+    assert len(http.get("/api/v1/workers").json()["workers"]) == 1
+    job = submit(http, [("after-restart.jpg", image_bytes())])
+    assert terminal(http, job)["succeeded"] == 1

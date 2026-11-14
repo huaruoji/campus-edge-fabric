@@ -14,6 +14,8 @@ from typing import Annotated, Any
 
 from cef_protocol import new_id
 from cef_protocol.models import (
+    AgentChatRequest,
+    AgentChatResponse,
     CompleteMeta,
     CompleteResponse,
     DrainResponse,
@@ -49,7 +51,7 @@ from cef_protocol.workloads import WORKLOAD_UNITS, InvalidParams, param_schema, 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 
-from . import db, scheduler, store
+from . import agent, db, scheduler, store
 from .config import Settings
 
 router = APIRouter(prefix="/api/v1")
@@ -737,3 +739,29 @@ def _manifest(conn: sqlite3.Connection, job: sqlite3.Row, counts: dict[str, int]
         generated_at=time.time(),
         entries=entries,
     )
+
+# ---------------------------------------------------------------------- agent
+@router.post("/agent/chat", response_model=AgentChatResponse)
+def agent_chat(request: Request, req: AgentChatRequest) -> AgentChatResponse:
+    """Natural language -> validated job preview (+ explanation of pool state).
+
+    The model runs server-side (key never reaches the browser) and its tools are
+    the same token-scoped operations a human has. It can only *preview* a job;
+    the actual POST /jobs comes from the human confirming in the UI.
+    """
+    s = settings_of(request)
+    try:
+        return agent.chat(req, s.port, s.token)
+    except agent.AgentUnavailable as exc:
+        raise _err(503, "agent_unavailable", str(exc)) from exc
+    except agent.AgentError as exc:
+        raise _err(502, "agent_error", str(exc)) from exc
+
+
+@router.delete("/workers/{worker_id}", status_code=204)
+def forget_worker(request: Request, worker_id: str) -> Response:
+    """Forget a device (dashboard cleanup). Its unstarted leases are requeued first."""
+    s = settings_of(request)
+    if not scheduler.forget_worker(s.db_path, worker_id):
+        raise _err(404, "not_found", f"worker {worker_id} not found")
+    return Response(status_code=204)

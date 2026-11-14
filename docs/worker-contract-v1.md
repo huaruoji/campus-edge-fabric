@@ -9,7 +9,7 @@
 - 当前为共享 token 的可信节点模型，没有用户/设备独立授权；不要把 worker_id 当成身份凭据。不适合互不信任的多租户。
 - JSON UTF-8；时间为 Unix 秒（浮点），`duration_s` 为秒，`idx` 从 0 开始。不要混用早期计划中的毫秒、ISO 时间和 `/worker/*` 路径。
 - ID 不透明；任务 attempt 首次领取为 1，每次重新领取才递增。排回队列本身不递增。
-- 单个 worker_id 只能由一个活跃 agent 使用，不能克隆给两台设备；重连可带原 ID，重启不保留 ID 的 agent 注册为新设备。
+- 单个 worker_id 只能由一个活跃 agent 使用，不能克隆给两台设备；agent 将 ID 保存到 data_dir/worker.id，重连和使用同一数据目录重启时复用 ID。没有保存 ID 的新数据目录注册为新设备。
 - 当前 workload 为 `thumbnail / infer / blender`，不是早期 OCR 草案。
 
 ## 2. 路径与模型（默认均为 200）

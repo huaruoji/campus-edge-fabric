@@ -8,6 +8,8 @@ Type=simple
 WorkingDirectory=/opt/campus-edge-fabric
 Environment=CEF_DATA=/var/lib/cef
 Environment=PYTHONUNBUFFERED=1
+# LLM key for the built-in chat agent (never in the repo)
+EnvironmentFile=-/etc/cef/agent.env
 # Call the venv entrypoint directly: no uv, no network, no $HOME at runtime.
 # (ProtectHome=true hides /root, so anything installed there is invisible to us.)
 ExecStart=/opt/campus-edge-fabric/.venv/bin/cef-coord serve --host 127.0.0.1 --port 8090 --data /var/lib/cef --token-file /etc/cef/token

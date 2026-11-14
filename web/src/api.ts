@@ -479,6 +479,7 @@ export interface ApiClient {
   getJob(jobId: string, signal?: AbortSignal): Promise<JobDetail>;
   submitJob(spec: JobSpec, files: File[]): Promise<SubmitResponse>;
   cancelJob(jobId: string): Promise<void>;
+  forgetWorker(workerId: string): Promise<void>;
   downloadResult(jobId: string): Promise<DownloadPayload>;
 }
 
@@ -617,6 +618,10 @@ export function createApiClient(baseUrlRaw: string, tokenRaw: string): ApiClient
 
     async cancelJob(jobId: string): Promise<void> {
       await requestJson("/jobs/" + encodeURIComponent(jobId) + "/cancel", { method: "POST" });
+    },
+
+    async forgetWorker(workerId: string): Promise<void> {
+      await requestJson("/workers/" + encodeURIComponent(workerId), { method: "DELETE" });
     },
 
     async downloadResult(jobId: string): Promise<DownloadPayload> {

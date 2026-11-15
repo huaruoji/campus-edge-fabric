@@ -46,7 +46,8 @@ export function ExperimentPanel({api}: {api: ApiClient}) {
       <label>评测数据集<select className="select" aria-label="评测数据集" value={dataset} onChange={(e) => setDataset(e.target.value)}><option value="">请选择已登记数据集</option>{datasets.data?.map((d) => <option key={d.id} value={d.name}>{d.name}（{d.count} 张）</option>)}</select></label>
       <p className="field-hint">yolo11n，输入 640，置信度 0.25。采用固定模型哈希和完整相同输入；请准备足够多的不重复图片，测量持续时间以实际完成为准。</p>
       <DevicePicker workers={workers.data ?? []} value={selected} onChange={setSelected} gpuOnly disabled={busy} />
-      <label>重复轮数<select className="select" aria-label="重复轮数" value={repeats} onChange={(e) => setRepeats(Number(e.target.value))}><option value={1}>1 轮（流程检查）</option><option value={3}>3 轮（默认）</option><option value={5}>5 轮</option></select></label>
+      <label>每种条件测几遍<select className="select" aria-label="每种条件测几遍" value={repeats} onChange={(e) => setRepeats(Number(e.target.value))}><option value={1}>1 遍（流程检查）</option><option value={3}>3 遍（推荐）</option><option value={5}>5 遍（耗时更长）</option></select></label>
+      <p className="field-hint">每台单机与多机算力池各测所选次数，取各条件吞吐的中位数，减少单次波动的影响。参考校验与预热不计成绩。</p>
       <p className="field-hint">评测期间选中设备暂不接其他 CEF 作业。每阶段最多等待 15 分钟；请确保设备所有者知情并关闭竞争计算负载。</p>
       <button className="btn btn--primary" onClick={() => void start()} disabled={busy || !dataset || (selected?.length ?? 0)<2}>{busy ? "请求中…" : "开始一键对照评测"}</button>
       {datasets.error ? <ErrorBox error={datasets.error} onRetry={datasets.refresh} /> : null}{workers.error ? <ErrorBox error={workers.error} onRetry={workers.refresh} /> : null}{error ? <ErrorBox error={error} compact /> : null}

@@ -98,7 +98,7 @@ function ChatThread({api, conversation, onChanged}: {api: ApiClient; conversatio
     </form><button className="btn btn--sm btn--ghost" disabled={renameBusy || sending} onClick={() => void update({archived: !conversation.archived})}>{conversation.archived ? "恢复对话" : "归档对话"}</button></header>
     <div className="chat-transcript" role="log" aria-label="共享对话" ref={transcriptRef} onScroll={() => {const el=transcriptRef.current; if (el) stickRef.current=el.scrollHeight-el.scrollTop-el.clientHeight<64;}}>
       {!history.data && history.loading ? <LoadingLine text="读取对话…" /> : null}
-      {history.data?.messages.length === 0 ? <div className="chat-welcome"><h2>今天需要处理哪些图片？</h2><p>选择数据集，描述目标。助手会核对参数，由你确认后创建真实任务。</p>
+      {history.data?.messages.length === 0 ? <div className="chat-welcome"><h2>今天有什么任务要处理？</h2><p>选择数据集，描述目标。助手会核对参数，由你确认后创建真实任务。</p>
         <div className="chat-suggestions"><button className="btn btn--ghost" onClick={() => setDraft("对选中的数据集做批量目标检测，使用 yolo11n，并说明输出内容。")}>批量目标检测</button><button className="btn btn--ghost" onClick={() => setDraft("哪些设备具备 GPU 推理能力？最近的任务是否正常？")}>查看设备与任务</button></div>
       </div> : null}
       {hasOlder && (older.length>0 || (history.data?.messages.length ?? 0)>=200) ? <button className="btn btn--sm btn--ghost" disabled={loadingOlder} onClick={()=>void loadOlder()}>{loadingOlder ? "读取中…" : "加载更早的消息"}</button> : null}
@@ -119,7 +119,7 @@ function ChatThread({api, conversation, onChanged}: {api: ApiClient; conversatio
       </div>
       {datasets.error ? <ErrorBox error={datasets.error} onRetry={datasets.refresh} /> : null}
       {workers.error ? <ErrorBox error={workers.error} onRetry={workers.refresh} /> : null}
-      <form onSubmit={(event) => void send(event)}><textarea className="textarea" aria-label="给算力助手发消息" placeholder="描述你要处理的图片和希望得到的结果…" value={draft} maxLength={4000} rows={3} disabled={!!conversation.archived} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if(e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {e.preventDefault(); e.currentTarget.form?.requestSubmit();} }} />
+      <form onSubmit={(event) => void send(event)}><textarea className="textarea" aria-label="给算力助手发消息" placeholder="描述你的任务和希望得到的结果…" value={draft} maxLength={4000} rows={3} disabled={!!conversation.archived} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if(e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {e.preventDefault(); e.currentTarget.form?.requestSubmit();} }} />
         <div className="composer-bottom"><span className="field-hint">{conversation.archived ? "此对话已归档，恢复后可继续。" : "数据由本地 Agent / CEF CLI 登记；Shift+Enter 换行。"}</span><button className="btn btn--primary" disabled={sending || !draft.trim() || !!conversation.archived}>{sending ? "处理中…" : "发送"}</button></div>
       </form>
     </div>

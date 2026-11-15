@@ -346,11 +346,20 @@ body.export .tw-c{display:none}
 .cef-chart-callout { display:flex; align-items:baseline; gap:26px; margin:8px 0; }
 .cef-chart-callout strong { font:750 68px/1.1 var(--en); color:var(--data); letter-spacing:-.03em; }
 .cef-chart-callout span { font-size:22px; color:var(--ink2); }
-.cef-proof { position:absolute; left:883px; top:0; right:0; border-left:1px solid var(--hair); padding-left:39px; }
-.cef-proof-line { margin:10px 0 26px; padding-bottom:24px; border-bottom:1px solid var(--hair); }
-.cef-proof-line strong { font:750 58px/1.1 var(--en); color:var(--mem); }
-.cef-proof-line .h3 { font-size:27px; margin:7px 0 3px; }
+.cef-proof { position:absolute; left:883px; top:0; right:0; border-left:1px solid var(--hair); padding-left:39px; display:grid; grid-template-columns:1fr 1fr; gap:20px 24px; }
+.cef-proof-line { margin:0; padding-bottom:18px; border-bottom:1px solid var(--hair); }
+.cef-proof-line strong { font:750 46px/1.1 var(--en); color:var(--mem); white-space:nowrap; }
+.cef-proof-line .h3 { font-size:24px; line-height:1.35; margin:7px 0 3px; }
+.cef-proof-line .small { font-size:20px; line-height:1.45; }
 .cef-proof-warning strong { color:var(--data); }
+.cef-task-figure { grid-column:1 / -1; min-width:0; margin:0; }
+.cef-task-figure figcaption { display:flex; justify-content:space-between; align-items:baseline; gap:14px; margin-bottom:12px; }
+.cef-task-figure .h3 { font-size:25px; }
+.cef-task-figure figcaption span { color:var(--slate); font-size:19px; white-space:nowrap; }
+.cef-task-figure a { display:block; }
+.cef-task-figure a:focus-visible { outline:2px solid var(--ai2); outline-offset:5px; }
+.cef-task-figure img { display:block; width:100%; height:auto; aspect-ratio:1920 / 780; object-fit:cover; object-position:50% 56%; }
+.cef-task-figure .small { margin-top:10px; font-size:20px; line-height:1.4; }
 .cef-competition td,.cef-competition tbody th { padding-top:15px; padding-bottom:15px; }
 .cef-claims { margin-top:34px; }
 .cef-claims .body + .body { margin-top:9px; }
@@ -439,6 +448,24 @@ body.export #cef-controls { display:none; }
 .summary-options p{font-size:30px;line-height:1.8;color:var(--slate)}
 .summary-close{font-size:34px;text-align:center;line-height:1.5;margin-top:67px;color:var(--ai2)}
 </style>
+<style>
+/* Scope the research-to-CLI narrative to slide two only. */
+.cef-opportunity .cef-head .h2{font-size:56px;line-height:1.35}
+.opportunity-evidence{position:absolute;left:120px;top:305px;width:790px}
+.opportunity-label{display:block;font-size:25px;line-height:1.5;color:var(--ai2);margin-bottom:15px}
+.opportunity-evidence strong{display:block;font:750 116px/1.06 var(--en);letter-spacing:-.045em;color:var(--ai2);margin-bottom:15px}
+.opportunity-evidence strong span{font-size:66px}
+.opportunity-evidence h3{font-size:34px;line-height:1.45;margin-bottom:18px}
+.opportunity-evidence p{font-size:25px;line-height:1.65;color:var(--slate)}
+.opportunity-evidence .opportunity-limit{font-size:21px;margin-top:18px}
+.opportunity-product{position:absolute;left:1010px;right:120px;top:305px;border-left:1px solid var(--hair);padding-left:48px}
+.opportunity-product h3{font-size:49px;line-height:1.5;margin:22px 0 26px}
+.opportunity-product p{font-size:29px;line-height:1.8;color:var(--slate)}
+.opportunity-install{position:absolute;top:769px;left:120px;right:120px;border-top:1px solid var(--hair);padding-top:20px}
+.opportunity-install h3{font-size:31px;color:var(--ai2);margin-bottom:16px}
+.opportunity-install pre{font-size:25px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink)}
+.opportunity-install p{font-size:22px;color:var(--slate);margin-top:12px}
+</style>
 </head>
 <!-- data-who：左下角署名；data-hint：首页右下角的按键提示 -->
 <body data-who="Campus Edge Fabric" data-hint="空格或 → 前进　← 返回　N 讲稿　F 全屏">
@@ -461,36 +488,26 @@ body.export #cef-controls { display:none; }
 依据　[R1] README、架构与工作空间文档。封面为 ENIAC 历史照片 [V1]。</aside>
 </section>
 
-<section class="slide cef-slide" data-sec="01|市场机会" data-tone="ai2" data-steps="3">
-  <header class="cef-head"><h2 class="h2 in">共享集群会排队，工作站也需要人协调</h2><p class="lead in" style="--d:1">首轮找有批量计算需求、能提供现有耗时记录的团队。</p></header>
-  <div class="cef-market cef-content">
-    <div>
-      <div class="cef-market-row in" style="--d:2">
-        <h3 class="h3">校级共享 GPU</h3><p class="body">Stanford Sherlock 提醒用户，GPU 作业可能排队。购买节点的课题组可取得优先访问。</p>
-      </div>
-      <div class="cef-market-row" data-k="1">
-        <h3 class="h3">组内已有工作站</h3><p class="body">EPFL 实验室指南里，用户先用 SSH 登录、查看 GPU 负载。机器太忙时可转用 Run:ai。</p>
-      </div>
-    </div>
-    <div class="cef-market-stat" data-k="2">
-      <h3 class="h3 fi">单个高校 GPU 集群观测</h3>
-      <div class="cef-huge c-data fi" style="--dl:.1s">50%</div>
-      <p class="punch fi" style="--dl:.25s">作业的平均 SM 利用率低于 5%</p>
-      <svg viewBox="0 0 708 12" width="100%" height="12" role="img" aria-label="一半的作业"><path d="M0 6h708" stroke="var(--hair)" stroke-width="2"/><path class="dr" pathLength="1" d="M0 6h354" stroke="var(--data)" stroke-width="4"/></svg>
-      <p class="small">样本为 10 天、7,399 个作业。<br>可调度的工作站空闲时段仍要实测。</p>
-    </div>
+<section class="slide cef-slide cef-opportunity" data-sec="01|市场机会" data-tone="ai2" data-steps="3">
+  <header class="cef-head"><h2 class="h2 in">算力不只需要更多，也需要更容易组织</h2></header>
+  <div class="opportunity-evidence">
+    <span class="opportunity-label">论文观测：一个高校 GPU 集群</span>
+    <strong>50<span>%</span></strong>
+    <h3>的作业，平均 GPU 计算单元<br>利用率低于 5%</h3>
+    <p>319 块 GPU，10 天，7,399 个作业<br>普林斯顿研究团队，100 ms 间隔监测</p>
+    <p class="opportunity-limit">不等于一半设备闲置，也不是 CEF 的实测结果。</p>
   </div>
-  <p class="cef-bottom punch" data-k="2">试点记录每批的排队时间、人工操作分钟和实际账单</p>
-  <p class="cef-source cap"><a href="https://www.sherlock.stanford.edu/docs/user-guide/gpu/">Stanford Sherlock</a> · <a href="https://github.com/dh-epfl-students/student-project-howtos">EPFL 实验室指南</a> · <a href="https://arxiv.org/abs/2610.36329">Sheinberg 等，2026 年预印本</a></p>
-  <aside class="notes">先算清一批作业的等待和人工成本（约 40 秒）
-
-核心表达　既要看有没有可用算力，也要看有没有值得替换的工作流程。
-
-现场讲法　斯坦福的共享 GPU 资源可能排队，已有优先队列的课题组也有很好的替代方案。EPFL 的实验室说明还保留了另一种日常做法：SSH 登录共享机器，查 GPU 是否忙。我们要找的是两种方案都经常妨碍交付的团队，比如每周要跑推理、不同工作站的空档不好协调。试点前先收两周日志，核对每批等待时长、人工操作分钟、可以挪用的 GPU 时段和实际云账单。
-
-依据　[E1] 斯坦福官方文档，[E2] EPFL 实验室指南，[E3] 高校 GPU 集群预印本。该研究统计的是已运行作业内的平均 SM 利用率，50% 的作业低于 5%，样本为一个高校集群十天、7,399 个作业。这个数字无法换算成目标实验室可调度的空闲小时。
-
-放映：第一步讲校级 GPU。按一下讲组内工作站，再按一下出研究数据。</aside>
+  <div class="opportunity-product" data-k="1">
+    <span class="opportunity-label">CEF 的切入点</span>
+    <h3>先让已有设备<br>方便地连起来</h3>
+    <p>便捷的命令行组网工具<br>让授权设备加入同一个任务池</p>
+  </div>
+  <div class="opportunity-install" data-k="2"><h3>一行命令，安装依赖并接入算力池</h3><pre><code>./deploy/worker.sh --server https://cef.huaruoji.com --token &lt;访问令牌&gt;</code></pre><p>下载代码后执行；GPU 环境和模型另行配置。</p></div>
+  <p class="cef-source cap">来源：Sheinberg、Gupta、Li（Princeton，2026） · <a href="https://arxiv.org/html/2610.36329v1" target="_blank" rel="noopener noreferrer">Plenty of Room in the Middle，arXiv:2610.36329</a></p>
+  <aside class="notes">研究依据 → 产品切入点 → 接入命令（约45秒）
+第一步说明数字：Sheinberg、Gupta、Li的论文对一个89节点、319块GPU的高校研究集群进行100ms粒度监测；分析限于具有准确Job ID到GPU映射的10天，共7,399个作业、150位用户、12个部门。论文发现50%的作业平均SM利用率低于5%。这里的计算单元指Streaming Multiprocessor，不是nvidia-smi常见的整体GPU忙碌率。出处为摘要、引言、资源利用分析和局限章节。该观测不等于一半设备闲置，不能推算个人设备空闲时长，也不能证明CEF已提高了这些作业的利用率。
+第二步衔接：拥有GPU不代表有效利用了GPU。论文讨论更好的调度与GPU多任务机会；CEF的切入点更小，是降低团队组网与提交任务的门槛，不声称实现了论文中的GPU细粒度共享。一台设备上的利用不足与多台设备组网是不同层次的问题。
+第三步给真实命令：下载代码后，在Linux/WSL仓库目录执行worker脚本，使用自己的访问令牌。脚本会在缺少uv时安装uv，初始化Worker依赖并接入协调器。Windows有单独PowerShell入口；不宣传这条bash命令跨平台通用。GPU驱动、运行库、模型及额外工作负载依赖仍需对应配置，不承诺一条命令完成全部GPU环境。不要在投屏里显示真实令牌。</aside>
 </section>
 
 <section class="slide cef-slide" data-sec="02|目标客户" data-tone="ai2" data-steps="3">
@@ -540,6 +557,11 @@ body.export #cef-controls { display:none; }
     <div class="cef-proof" data-at="3">
       <div class="cef-proof-line fi" style="--dl:.35s"><strong>900 / 900</strong><div><h3 class="h3">正式输出全部通过逐像素校验</h3><p class="small">100 张原图跨九轮复用。<br>三轮共同运行均有两台 Worker 参与。</p></div></div>
       <div class="cef-proof-line fi" style="--dl:.65s"><strong>η = 88.26%</strong><div><h3 class="h3">聚合效率</h3><p class="small">共同运行吞吐 / 两条单机吞吐之和<br>3.3055 / (2.6198 + 1.1255)</p></div></div>
+      <figure class="cef-task-figure">
+        <figcaption><h3 class="h3">任务效果 · 原图 → 缩略图</h3><span>点击图片放大 ↗</span></figcaption>
+        <a href="assets/cpu-task.webp" target="_blank" rel="noopener noreferrer" aria-label="放大 CPU 缩图任务效果图"><img src="assets/cpu-task.webp" width="1920" height="780" alt="jochi 和 liusic 的真实缩图结果：城堡与雕像原图分别缩小为长边 256 像素的 PNG。"></a>
+        <p class="small">两台 Worker 的真实输出 · BSDS300</p>
+      </figure>
     </div>
 
   </div>
@@ -551,8 +573,13 @@ body.export #cef-controls { display:none; }
       <p class="small">110 张 COCO 输入，固定 YOLO11n，三条件各三轮。<br>计时从作业提交至下载，首次数据注册不计入。</p>
     </div>
     <div class="cef-proof">
-      <div class="cef-proof-line cef-proof-warning fi" style="--dl:.35s"><strong>1260 / 1350</strong><div><h3 class="h3">通过数值参考校验的输出（全实验）</h3><p class="small">8 / 32 / 110 张，共完成 27 轮正式对照。<br>其中 110 张双机组通过 306 / 330。</p></div></div>
-      <div class="cef-proof-line fi" style="--dl:.65s"><strong>η = 99.97%</strong><div><h3 class="h3">110 张组的聚合效率</h3><p class="small">只计通过数值参考的输出，保留整轮耗时。</p></div></div>
+      <div class="cef-proof-line cef-proof-warning fi" style="--dl:.35s"><strong>1260 / 1350</strong><div><h3 class="h3">全实验数值参考校验通过</h3><p class="small">8 / 32 / 110 张，共完成 27 轮正式对照。<br>其中 110 张双机组通过 306 / 330。</p></div></div>
+      <div class="cef-proof-line fi" style="--dl:.65s"><strong>η = 99.97%</strong><div><h3 class="h3">110 张组的聚合效率</h3><p class="small">吞吐只计通过输出<br>耗时保留整轮</p></div></div>
+      <figure class="cef-task-figure">
+        <figcaption><h3 class="h3">任务效果 · YOLO11n 检测框</h3><span>点击图片放大 ↗</span></figcaption>
+        <a href="assets/gpu-task.webp" target="_blank" rel="noopener noreferrer" aria-label="放大 GPU 检测任务效果图"><img src="assets/gpu-task.webp" width="1920" height="780" alt="同一次 GPU 作业的 8 张检测框叠图，jochi 与 liusic 各完成 4 张，显示模型框坐标和置信度。"></a>
+        <p class="small">8 张样例，两台各完成 4 张 · COCO128 / COCO</p>
+      </figure>
     </div>
   </div>
   <p class="cef-source cap"><a href="https://github.com/huaruoji/campus-edge-fabric/blob/main/docs/testing/thumbnail-report-2026-11-14.md">CPU 报告</a> · <a href="https://github.com/huaruoji/campus-edge-fabric/blob/main/docs/testing/infer-2026-11-14/report.md">双 GPU 报告</a> · <a href="https://github.com/huaruoji/campus-edge-fabric/blob/main/docs/testing/demo-2026-11-15/result-data.json">数值与计算依据</a> · <a href="https://cef.huaruoji.com/#/devices">产品设备页</a></p>
@@ -572,7 +599,9 @@ GPU 测试的 110 张组，共同运行有效吞吐为每秒 2.7463 张，比最
 
 计时范围：CPU 包含逐轮输入上传；GPU 复用已注册数据集，不含首次注册。两组均包含调度和结果下载，不计本地参考校验，不能直接比较 CPU 与 GPU 硬件性能。GPU 实验跨一次客户端连接中断恢复完成，中断轮次的旧计时已排除。上游精度修复尚未在这组数据上复验。物理设备身份、完整硬件和远端部署提交仍需补证。Blender 未在这两组实验中验收。
 
-数据来源：CPU 与 GPU 数据依据下方报告和精简数据链接。</aside>
+数据来源：CPU 与 GPU 数据依据下方报告和精简数据链接。
+
+任务效果图：CPU 图使用 Berkeley BSDS300 的 102061.jpg 与 101085.jpg 及两台 Worker 返回的 PNG，来自作业 job_01M7CKHCVQHAWRHF5Z2P89C6SE。GPU 图使用 Ultralytics COCO128 / COCO 的 8 张图片及保存的检测 JSON 叠图，来自作业 job_01M7D8E1ESN3WJB2VTCV7FJWKQ，两台各完成 4 张。两张图对应 2026-11-14 的真实输出；图片可点击打开完整效果图。</aside>
 </section>
 
 <section class="slide cef-slide pitch-late pitch-summary" data-sec="04|发展路径" data-tone="ai2" data-steps="2">
@@ -929,37 +958,43 @@ D.flicker={
     dot(s,[x+78,y+42,z-14],colors.ready,4,{a:.95});
     label(s,[x,y+122,z-16],name,{cls:'tool'});
   }
-  function coordinatorRack(s) {
+  function coordinatorRack(s, stacked=false) {
     const [x,y,z]=coordinator;
     [0,28,56].forEach((offset)=>{
       box(s,x,y+offset,z,208,23,86,colors.frame,{a:.98});
       line(s,[-78,y+offset,z-44],[32,y+offset,z-44],colors.coordinator,2.4,{a:.8});
       dot(s,[77,y+offset,z-45],colors.coordinator,4,{a:.96});
     });
-    label(s,[x,y-48,z-26],'Coordinator',{cls:'ai'});
+    label(s,stacked?[x+132,y+28,z-26]:[x,y-48,z-26],'Coordinator',{cls:'ai',al:stacked?'l':'c'});
   }
-  function file(s, [x,y,z], name, accent) {
+  function file(s, [x,y,z], name, accent, stacked=false) {
     box(s,x,y,z,108,126,8,colors.screen,{a:.98});
     const p=[[x-54,y-63,z-6],[x+54,y-63,z-6],[x+54,y+63,z-6],[x-54,y+63,z-6],[x-54,y-63,z-6]];
     for(let i=0;i<4;i++) line(s,p[i],p[i+1],accent,1.6,{a:.75});
     [0,1,2].forEach(i=>line(s,[x-24,y-19+i*16,z-7],[x+22-i*5,y-19+i*16,z-7],accent,2,{a:.83}));
-    label(s,[x,y+93,z-8],name,{cls:accent===colors.ready?'mem':'data'});
+    label(s,stacked?[x+82,y,z-8]:[x,y+93,z-8],name,{cls:accent===colors.ready?'mem':'data',al:stacked?'l':'c'});
   }
-  function link(s,from,to,color,count,speed) {
+  function link(s,from,to,color,count,speed,straight=false) {
     const mid=[from[0]+(to[0]-from[0])*.46,(from[1]+to[1])/2,Math.min(from[2],to[2])-92];
-    const path=[from,mid,to];
-    line(s,from,mid,color,1.7,{a:.36});
-    line(s,mid,to,color,1.7,{a:.62,arrow:true});
-    flow(s,path,count,color,3.5,speed);
+    const path=straight?[from,to]:[from,mid,to];
+    if(straight) {
+      line(s,from,to,color,1.7,{a:.62,arrow:true});
+    } else {
+      line(s,from,mid,color,1.7,{a:.36});
+      line(s,mid,to,color,1.7,{a:.62,arrow:true});
+    }
+    flow(s,path,count,color,straight?2.7:3.5,speed);
     s.flows.at(-1).glow=false;
   }
   function setup(name) {
     const s=Scene(name);
-    s.cam={cx:1296,cy:522,yaw:-.14,pitch:.23,F:2200,scale:1.04,spin:0,swing:.04};
+    const stacked=name==='dispatch'||name==='collect';
+    // Keep the input/result above the rack, below the slide heading; workers stay on the bottom tier.
+    s.cam={cx:1296,cy:stacked?690:522,yaw:-.14,pitch:.23,F:2200,scale:1.04,spin:0,swing:.04};
     s.sample=230;
     s.sampleA=.34;
     s.dur=1440;
-    coordinatorRack(s);
+    coordinatorRack(s,stacked);
     workers.forEach((point,i)=>workstation(s,point,'Worker '+(i+1)));
     return s;
   }
@@ -970,18 +1005,23 @@ D.flicker={
     label(s,[0,-8,-56],'注册与心跳',{cls:'tool',dy:-14});
     return s;
   });
+  // Shared top tier: reversing the spine reverses data flow without moving the nodes.
+  const artifactPosition=[coordinator[0],coordinator[1]-123,coordinator[2]];
+  const artifactPort=[artifactPosition[0],artifactPosition[1]+63,artifactPosition[2]];
+  const rackTopPort=[coordinator[0],coordinator[1]-12,coordinator[2]];
+  const rackBottomPort=[0,-103,14];
   E3.def('dispatch',()=>{
     const s=setup('dispatch');
-    file(s,[0,98,-102],'任务批次',colors.data);
-    link(s,[0,34,-108],[0,-102,7],colors.data,48,.24);
-    workers.forEach(point=>link(s,[0,-104,17],workerPort(point),colors.data,67,.27));
+    file(s,artifactPosition,'任务批次',colors.data,true);
+    link(s,artifactPort,rackTopPort,colors.data,6,.24,true);
+    workers.forEach(point=>link(s,rackBottomPort,workerPort(point),colors.data,34,.27,true));
     return s;
   });
   E3.def('collect',()=>{
     const s=setup('collect');
-    file(s,[0,111,-112],'结果 ZIP',colors.ready);
-    workers.forEach(point=>link(s,workerPort(point),[0,-103,14],colors.ready,63,.24));
-    link(s,[0,-101,10],[0,47,-118],colors.ready,62,.24);
+    file(s,artifactPosition,'结果 ZIP',colors.ready,true);
+    workers.forEach(point=>link(s,workerPort(point),rackBottomPort,colors.ready,34,.24,true));
+    link(s,rackTopPort,artifactPort,colors.ready,6,.24,true);
     return s;
   });
 

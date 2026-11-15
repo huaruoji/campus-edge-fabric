@@ -448,6 +448,24 @@ body.export #cef-controls { display:none; }
 .summary-options p{font-size:30px;line-height:1.8;color:var(--slate)}
 .summary-close{font-size:34px;text-align:center;line-height:1.5;margin-top:67px;color:var(--ai2)}
 </style>
+<style>
+/* Scope the research-to-CLI narrative to slide two only. */
+.cef-opportunity .cef-head .h2{font-size:56px;line-height:1.35}
+.opportunity-evidence{position:absolute;left:120px;top:305px;width:790px}
+.opportunity-label{display:block;font-size:25px;line-height:1.5;color:var(--ai2);margin-bottom:15px}
+.opportunity-evidence strong{display:block;font:750 116px/1.06 var(--en);letter-spacing:-.045em;color:var(--ai2);margin-bottom:15px}
+.opportunity-evidence strong span{font-size:66px}
+.opportunity-evidence h3{font-size:34px;line-height:1.45;margin-bottom:18px}
+.opportunity-evidence p{font-size:25px;line-height:1.65;color:var(--slate)}
+.opportunity-evidence .opportunity-limit{font-size:21px;margin-top:18px}
+.opportunity-product{position:absolute;left:1010px;right:120px;top:305px;border-left:1px solid var(--hair);padding-left:48px}
+.opportunity-product h3{font-size:49px;line-height:1.5;margin:22px 0 26px}
+.opportunity-product p{font-size:29px;line-height:1.8;color:var(--slate)}
+.opportunity-install{position:absolute;top:769px;left:120px;right:120px;border-top:1px solid var(--hair);padding-top:20px}
+.opportunity-install h3{font-size:31px;color:var(--ai2);margin-bottom:16px}
+.opportunity-install pre{font-size:25px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink)}
+.opportunity-install p{font-size:22px;color:var(--slate);margin-top:12px}
+</style>
 </head>
 <!-- data-who：左下角署名；data-hint：首页右下角的按键提示 -->
 <body data-who="Campus Edge Fabric" data-hint="空格或 → 前进　← 返回　N 讲稿　F 全屏">
@@ -470,36 +488,26 @@ body.export #cef-controls { display:none; }
 依据　[R1] README、架构与工作空间文档。封面为 ENIAC 历史照片 [V1]。</aside>
 </section>
 
-<section class="slide cef-slide" data-sec="01|市场机会" data-tone="ai2" data-steps="3">
-  <header class="cef-head"><h2 class="h2 in">共享集群会排队，工作站也需要人协调</h2><p class="lead in" style="--d:1">首轮找有批量计算需求、能提供现有耗时记录的团队。</p></header>
-  <div class="cef-market cef-content">
-    <div>
-      <div class="cef-market-row in" style="--d:2">
-        <h3 class="h3">校级共享 GPU</h3><p class="body">Stanford Sherlock 提醒用户，GPU 作业可能排队。购买节点的课题组可取得优先访问。</p>
-      </div>
-      <div class="cef-market-row" data-k="1">
-        <h3 class="h3">组内已有工作站</h3><p class="body">EPFL 实验室指南里，用户先用 SSH 登录、查看 GPU 负载。机器太忙时可转用 Run:ai。</p>
-      </div>
-    </div>
-    <div class="cef-market-stat" data-k="2">
-      <h3 class="h3 fi">单个高校 GPU 集群观测</h3>
-      <div class="cef-huge c-data fi" style="--dl:.1s">50%</div>
-      <p class="punch fi" style="--dl:.25s">作业的平均 SM 利用率低于 5%</p>
-      <svg viewBox="0 0 708 12" width="100%" height="12" role="img" aria-label="一半的作业"><path d="M0 6h708" stroke="var(--hair)" stroke-width="2"/><path class="dr" pathLength="1" d="M0 6h354" stroke="var(--data)" stroke-width="4"/></svg>
-      <p class="small">样本为 10 天、7,399 个作业。<br>可调度的工作站空闲时段仍要实测。</p>
-    </div>
+<section class="slide cef-slide cef-opportunity" data-sec="01|市场机会" data-tone="ai2" data-steps="3">
+  <header class="cef-head"><h2 class="h2 in">算力不只需要更多，也需要更容易组织</h2></header>
+  <div class="opportunity-evidence">
+    <span class="opportunity-label">论文观测：一个高校 GPU 集群</span>
+    <strong>50<span>%</span></strong>
+    <h3>的作业，平均 GPU 计算单元<br>利用率低于 5%</h3>
+    <p>319 块 GPU，10 天，7,399 个作业<br>普林斯顿研究团队，100 ms 间隔监测</p>
+    <p class="opportunity-limit">不等于一半设备闲置，也不是 CEF 的实测结果。</p>
   </div>
-  <p class="cef-bottom punch" data-k="2">试点记录每批的排队时间、人工操作分钟和实际账单</p>
-  <p class="cef-source cap"><a href="https://www.sherlock.stanford.edu/docs/user-guide/gpu/">Stanford Sherlock</a> · <a href="https://github.com/dh-epfl-students/student-project-howtos">EPFL 实验室指南</a> · <a href="https://arxiv.org/abs/2610.36329">Sheinberg 等，2026 年预印本</a></p>
-  <aside class="notes">先算清一批作业的等待和人工成本（约 40 秒）
-
-核心表达　既要看有没有可用算力，也要看有没有值得替换的工作流程。
-
-现场讲法　斯坦福的共享 GPU 资源可能排队，已有优先队列的课题组也有很好的替代方案。EPFL 的实验室说明还保留了另一种日常做法：SSH 登录共享机器，查 GPU 是否忙。我们要找的是两种方案都经常妨碍交付的团队，比如每周要跑推理、不同工作站的空档不好协调。试点前先收两周日志，核对每批等待时长、人工操作分钟、可以挪用的 GPU 时段和实际云账单。
-
-依据　[E1] 斯坦福官方文档，[E2] EPFL 实验室指南，[E3] 高校 GPU 集群预印本。该研究统计的是已运行作业内的平均 SM 利用率，50% 的作业低于 5%，样本为一个高校集群十天、7,399 个作业。这个数字无法换算成目标实验室可调度的空闲小时。
-
-放映：第一步讲校级 GPU。按一下讲组内工作站，再按一下出研究数据。</aside>
+  <div class="opportunity-product" data-k="1">
+    <span class="opportunity-label">CEF 的切入点</span>
+    <h3>先让已有设备<br>方便地连起来</h3>
+    <p>便捷的命令行组网工具<br>让授权设备加入同一个任务池</p>
+  </div>
+  <div class="opportunity-install" data-k="2"><h3>一行命令，安装依赖并接入算力池</h3><pre><code>./deploy/worker.sh --server https://cef.huaruoji.com --token &lt;访问令牌&gt;</code></pre><p>下载代码后执行；GPU 环境和模型另行配置。</p></div>
+  <p class="cef-source cap">来源：Sheinberg、Gupta、Li（Princeton，2026） · <a href="https://arxiv.org/html/2610.36329v1" target="_blank" rel="noopener noreferrer">Plenty of Room in the Middle，arXiv:2610.36329</a></p>
+  <aside class="notes">研究依据 → 产品切入点 → 接入命令（约45秒）
+第一步说明数字：Sheinberg、Gupta、Li的论文对一个89节点、319块GPU的高校研究集群进行100ms粒度监测；分析限于具有准确Job ID到GPU映射的10天，共7,399个作业、150位用户、12个部门。论文发现50%的作业平均SM利用率低于5%。这里的计算单元指Streaming Multiprocessor，不是nvidia-smi常见的整体GPU忙碌率。出处为摘要、引言、资源利用分析和局限章节。该观测不等于一半设备闲置，不能推算个人设备空闲时长，也不能证明CEF已提高了这些作业的利用率。
+第二步衔接：拥有GPU不代表有效利用了GPU。论文讨论更好的调度与GPU多任务机会；CEF的切入点更小，是降低团队组网与提交任务的门槛，不声称实现了论文中的GPU细粒度共享。一台设备上的利用不足与多台设备组网是不同层次的问题。
+第三步给真实命令：下载代码后，在Linux/WSL仓库目录执行worker脚本，使用自己的访问令牌。脚本会在缺少uv时安装uv，初始化Worker依赖并接入协调器。Windows有单独PowerShell入口；不宣传这条bash命令跨平台通用。GPU驱动、运行库、模型及额外工作负载依赖仍需对应配置，不承诺一条命令完成全部GPU环境。不要在投屏里显示真实令牌。</aside>
 </section>
 
 <section class="slide cef-slide" data-sec="02|目标客户" data-tone="ai2" data-steps="3">

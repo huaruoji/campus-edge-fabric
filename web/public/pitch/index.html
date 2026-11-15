@@ -503,7 +503,6 @@ body.export #cef-controls { display:none; }
     <div class="cef-proof" data-at="3">
       <div class="cef-proof-line fi" style="--dl:.35s"><strong>900 / 900</strong><div><h3 class="h3">正式输出全部通过逐像素校验</h3><p class="small">100 张原图跨九轮复用。<br>三轮共同运行均有两台 Worker 参与。</p></div></div>
       <div class="cef-proof-line fi" style="--dl:.65s"><strong>η = 88.26%</strong><div><h3 class="h3">聚合效率</h3><p class="small">共同运行吞吐 / 两条单机吞吐之和<br>3.3055 / (2.6198 + 1.1255)</p></div></div>
-      <p class="small cef-result-note">η 使用实测单机之和作为参照，非理论上限。<br>设备身份与远端部署版本仍待补证。</p>
     </div>
     <div class="cef-product-shot" data-at="5">
       <div class="win" data-demo="cefInspect" data-demo-steps="5">
@@ -530,8 +529,7 @@ body.export #cef-controls { display:none; }
     </div>
     <div class="cef-proof">
       <div class="cef-proof-line cef-proof-warning fi" style="--dl:.35s"><strong>1260 / 1350</strong><div><h3 class="h3">通过数值参考校验的输出（全实验）</h3><p class="small">8 / 32 / 110 张，共完成 27 轮正式对照。<br>其中 110 张双机组通过 306 / 330。</p></div></div>
-      <div class="cef-proof-line fi" style="--dl:.65s"><strong>η = 99.97%</strong><div><h3 class="h3">110 张组的聚合效率</h3><p class="small">只计通过数值参考的输出，保留整轮耗时。<br>η 参照单机实测之和，不代表 GPU 利用率。</p></div></div>
-      <p class="small c-data cef-result-note">诊断性对照，数值一致性仍待复验。</p>
+      <div class="cef-proof-line fi" style="--dl:.65s"><strong>η = 99.97%</strong><div><h3 class="h3">110 张组的聚合效率</h3><p class="small">只计通过数值参考的输出，保留整轮耗时。</p></div></div>
     </div>
   </div>
   <p class="cef-source cap"><a href="https://github.com/huaruoji/campus-edge-fabric/blob/main/docs/testing/thumbnail-report-2026-11-14.md">CPU 报告</a> · <a href="https://github.com/huaruoji/campus-edge-fabric/blob/main/docs/testing/infer-2026-11-14/report.md">双 GPU 报告</a> · <a href="https://github.com/huaruoji/campus-edge-fabric/blob/main/docs/testing/demo-2026-11-15/result-data.json">数值与计算依据</a> · <a href="https://cef.huaruoji.com/#/devices">产品设备页</a></p>

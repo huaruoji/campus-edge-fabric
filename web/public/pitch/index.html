@@ -950,37 +950,43 @@ D.flicker={
     dot(s,[x+78,y+42,z-14],colors.ready,4,{a:.95});
     label(s,[x,y+122,z-16],name,{cls:'tool'});
   }
-  function coordinatorRack(s) {
+  function coordinatorRack(s, stacked=false) {
     const [x,y,z]=coordinator;
     [0,28,56].forEach((offset)=>{
       box(s,x,y+offset,z,208,23,86,colors.frame,{a:.98});
       line(s,[-78,y+offset,z-44],[32,y+offset,z-44],colors.coordinator,2.4,{a:.8});
       dot(s,[77,y+offset,z-45],colors.coordinator,4,{a:.96});
     });
-    label(s,[x,y-48,z-26],'Coordinator',{cls:'ai'});
+    label(s,stacked?[x+132,y+28,z-26]:[x,y-48,z-26],'Coordinator',{cls:'ai',al:stacked?'l':'c'});
   }
-  function file(s, [x,y,z], name, accent) {
+  function file(s, [x,y,z], name, accent, stacked=false) {
     box(s,x,y,z,108,126,8,colors.screen,{a:.98});
     const p=[[x-54,y-63,z-6],[x+54,y-63,z-6],[x+54,y+63,z-6],[x-54,y+63,z-6],[x-54,y-63,z-6]];
     for(let i=0;i<4;i++) line(s,p[i],p[i+1],accent,1.6,{a:.75});
     [0,1,2].forEach(i=>line(s,[x-24,y-19+i*16,z-7],[x+22-i*5,y-19+i*16,z-7],accent,2,{a:.83}));
-    label(s,[x,y+93,z-8],name,{cls:accent===colors.ready?'mem':'data'});
+    label(s,stacked?[x+82,y,z-8]:[x,y+93,z-8],name,{cls:accent===colors.ready?'mem':'data',al:stacked?'l':'c'});
   }
-  function link(s,from,to,color,count,speed) {
+  function link(s,from,to,color,count,speed,straight=false) {
     const mid=[from[0]+(to[0]-from[0])*.46,(from[1]+to[1])/2,Math.min(from[2],to[2])-92];
-    const path=[from,mid,to];
-    line(s,from,mid,color,1.7,{a:.36});
-    line(s,mid,to,color,1.7,{a:.62,arrow:true});
-    flow(s,path,count,color,3.5,speed);
+    const path=straight?[from,to]:[from,mid,to];
+    if(straight) {
+      line(s,from,to,color,1.7,{a:.62,arrow:true});
+    } else {
+      line(s,from,mid,color,1.7,{a:.36});
+      line(s,mid,to,color,1.7,{a:.62,arrow:true});
+    }
+    flow(s,path,count,color,straight?2.7:3.5,speed);
     s.flows.at(-1).glow=false;
   }
   function setup(name) {
     const s=Scene(name);
-    s.cam={cx:1296,cy:522,yaw:-.14,pitch:.23,F:2200,scale:1.04,spin:0,swing:.04};
+    const stacked=name==='dispatch'||name==='collect';
+    // Keep the input/result above the rack, below the slide heading; workers stay on the bottom tier.
+    s.cam={cx:1296,cy:stacked?690:522,yaw:-.14,pitch:.23,F:2200,scale:1.04,spin:0,swing:.04};
     s.sample=230;
     s.sampleA=.34;
     s.dur=1440;
-    coordinatorRack(s);
+    coordinatorRack(s,stacked);
     workers.forEach((point,i)=>workstation(s,point,'Worker '+(i+1)));
     return s;
   }
@@ -991,18 +997,23 @@ D.flicker={
     label(s,[0,-8,-56],'注册与心跳',{cls:'tool',dy:-14});
     return s;
   });
+  // Shared top tier: reversing the spine reverses data flow without moving the nodes.
+  const artifactPosition=[coordinator[0],coordinator[1]-123,coordinator[2]];
+  const artifactPort=[artifactPosition[0],artifactPosition[1]+63,artifactPosition[2]];
+  const rackTopPort=[coordinator[0],coordinator[1]-12,coordinator[2]];
+  const rackBottomPort=[0,-103,14];
   E3.def('dispatch',()=>{
     const s=setup('dispatch');
-    file(s,[0,98,-102],'任务批次',colors.data);
-    link(s,[0,34,-108],[0,-102,7],colors.data,48,.24);
-    workers.forEach(point=>link(s,[0,-104,17],workerPort(point),colors.data,67,.27));
+    file(s,artifactPosition,'任务批次',colors.data,true);
+    link(s,artifactPort,rackTopPort,colors.data,6,.24,true);
+    workers.forEach(point=>link(s,rackBottomPort,workerPort(point),colors.data,34,.27,true));
     return s;
   });
   E3.def('collect',()=>{
     const s=setup('collect');
-    file(s,[0,111,-112],'结果 ZIP',colors.ready);
-    workers.forEach(point=>link(s,workerPort(point),[0,-103,14],colors.ready,63,.24));
-    link(s,[0,-101,10],[0,47,-118],colors.ready,62,.24);
+    file(s,artifactPosition,'结果 ZIP',colors.ready,true);
+    workers.forEach(point=>link(s,workerPort(point),rackBottomPort,colors.ready,34,.24,true));
+    link(s,rackTopPort,artifactPort,colors.ready,6,.24,true);
     return s;
   });
 

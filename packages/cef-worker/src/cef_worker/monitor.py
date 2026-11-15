@@ -7,6 +7,7 @@ metric — the metric is completed tasks per second.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -55,22 +56,29 @@ class ResourceMonitor:
         # disk is measured on the volume that actually holds task scratch space
         self._data_dir = data_dir or Path.home() / ".cef" / "worker"
 
+    def _gpu_query(self, fields: str) -> str | None:
+        if not self._nvidia:
+            return None
+        # CUDA_VISIBLE_DEVICES changes CUDA ordinals, not nvidia-smi indices.
+        # An unselected multi-GPU host must not silently report GPU 0.
+        uuid = os.environ.get("CEF_GPU_UUID", "").strip()
+        if not uuid:
+            visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
+            uuid = visible if visible.startswith("GPU-") and "," not in visible else ""
+        command = [self._nvidia, f"--query-gpu={fields}", "--format=csv,noheader,nounits"]
+        if uuid:
+            command.append(f"--id={uuid}")
+        out = subprocess.run(command, capture_output=True, text=True, timeout=4, check=False)
+        lines = [line.strip() for line in (out.stdout or "").splitlines() if line.strip()]
+        return lines[0] if out.returncode == 0 and len(lines) == 1 else None
+
     def probe_gpu(self) -> tuple[str | None, float | None]:
         if not self._nvidia:
             return None, None
         try:
-            out = subprocess.run(
-                [
-                    self._nvidia,
-                    "--query-gpu=name,memory.total,utilization.gpu",
-                    "--format=csv,noheader,nounits",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=4,
-                check=False,
-            )
-            first = (out.stdout or "").strip().splitlines()[0]
+            first = self._gpu_query("name,memory.total,utilization.gpu")
+            if first is None:
+                return None, None
             name, mem, util = [p.strip() for p in first.split(",")]
             return f"{name} ({int(float(mem))} MiB)", float(util)
         except Exception:  # noqa: BLE001 - GPU probing must never break the agent
@@ -96,18 +104,9 @@ class ResourceMonitor:
                 pass
         if self._nvidia:
             try:
-                out = subprocess.run(
-                    [
-                        self._nvidia,
-                        "--query-gpu=utilization.gpu,memory.used,memory.total,name",
-                        "--format=csv,noheader,nounits",
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=4,
-                    check=False,
-                )
-                line = (out.stdout or "").strip().splitlines()[0]
+                line = self._gpu_query("utilization.gpu,memory.used,memory.total,name")
+                if line is None:
+                    return s
                 util, used, total, gname = [p.strip() for p in line.split(",", 3)]
                 s.gpu_pct = float(util)
                 s.gpu_mem_pct = round(100.0 * float(used) / max(1.0, float(total)), 1)

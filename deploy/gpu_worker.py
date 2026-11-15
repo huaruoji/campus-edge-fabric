@@ -11,8 +11,10 @@ import hashlib
 import json
 import logging
 import os
+import re
 import signal
 import socket
+import subprocess
 import sysconfig
 import threading
 import urllib.request
@@ -21,6 +23,7 @@ from pathlib import Path
 
 from cef_worker.agent import Agent
 from cef_worker.config import WorkerConfig
+from cef_worker.monitor import find_nvidia_smi
 from cef_worker.workloads.base import WorkloadError
 from cef_worker.workloads.infer import InferWorkload
 
@@ -93,6 +96,29 @@ def require_cuda(session):
         raise RuntimeError("CUDA session failed; refusing CPU-only fallback")
 
 
+def select_gpu(uuid, device):
+    """Bind CUDA and telemetry to one physical UUID before importing ORT."""
+    if device != 0:
+        raise ValueError("Use --gpu-uuid for physical selection; isolated CUDA --device must be 0")
+    if uuid and not re.fullmatch(r"GPU-[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", uuid):
+        raise ValueError("--gpu-uuid must be a complete NVIDIA GPU UUID")
+    smi = find_nvidia_smi()
+    if not smi:
+        raise RuntimeError("nvidia-smi unavailable; cannot verify target GPU")
+    command = [smi, "--query-gpu=uuid", "--format=csv,noheader"]
+    if uuid:
+        command.append(f"--id={uuid}")
+    result = subprocess.run(command, capture_output=True, text=True, timeout=10, check=True)
+    ids = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    if len(ids) != 1 or (uuid and ids[0].lower() != uuid.lower()):
+        raise RuntimeError("Select exactly one physical GPU with --gpu-uuid or CEF_GPU_UUID")
+    if not uuid and os.environ.get("CUDA_VISIBLE_DEVICES") not in (None, "0", ids[0]):
+        raise RuntimeError("Ambiguous CUDA_VISIBLE_DEVICES; specify the physical --gpu-uuid explicitly")
+    os.environ["CEF_GPU_UUID"] = ids[0]
+    os.environ["CUDA_VISIBLE_DEVICES"] = ids[0]
+    return ids[0]
+
+
 class CudaInference(InferWorkload):
     def __init__(self, model_dir, device=0, profile_dir=None):
         import onnxruntime as ort
@@ -153,9 +179,17 @@ def check(model_dir, device):
     result = adapter.session.run(None, {adapter.session.get_inputs()[0].name: x})[0]
     if result.shape != (1, 84, 8400) or not np.isfinite(result).all():
         raise RuntimeError(f"Unexpected model output: {result.shape}")
+    cpu = adapter._session("yolo11n", "cpu")
+    if cpu.get_providers()[0] != "CPUExecutionProvider":
+        raise RuntimeError("Explicit CPU reference request incorrectly routed to CUDA")
+    cpu_result = cpu.run(None, {cpu.get_inputs()[0].name: x})[0]
+    if cpu_result.shape != result.shape or not np.isfinite(cpu_result).all():
+        raise RuntimeError("CPU reference inference failed")
     print(
         json.dumps(
-            {"providers": adapter.session.get_providers(), "output_shape": list(result.shape), "device": device, "real_inference_passed": True}
+            {"providers": adapter.session.get_providers(), "cpu_providers": cpu.get_providers(),
+             "gpu_uuid": os.environ.get("CEF_GPU_UUID"), "output_shape": list(result.shape),
+             "device": device, "real_inference_passed": True}
         )
     )
 
@@ -196,6 +230,8 @@ def run(args, data, model_dir):
             "data": str(data),
             "server": args.server,
             "name": args.name,
+            "gpu_uuid": os.environ.get("CEF_GPU_UUID"),
+            "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
             "tags": cfg.tags,
             "ort_version": ort.__version__,
             "providers": adapter.session.get_providers(),
@@ -241,6 +277,7 @@ def main():
     parser.add_argument("--tags", default=socket.gethostname())
     parser.add_argument("--slots", type=int, default=2)
     parser.add_argument("--device", type=int, default=0)
+    parser.add_argument("--gpu-uuid", default=os.environ.get("CEF_GPU_UUID"), help="Physical GPU UUID; CUDA logical device remains 0")
     parser.add_argument("--profile-dir")
     args = parser.parse_args()
     if args.slots < 1 or args.device < 0:
@@ -250,6 +287,8 @@ def main():
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     data = args.data.resolve()
     model_dir = (args.model_dir or data / "models").resolve()
+    if args.action in ("check", "run"):
+        select_gpu(args.gpu_uuid, args.device)
     if args.action == "setup-model":
         download_checked(MODEL_URL, model_dir / "yolo11n.onnx", MODEL_SHA256)
         download_checked(IMAGE_URL, data / "bus.jpg", IMAGE_SHA256)

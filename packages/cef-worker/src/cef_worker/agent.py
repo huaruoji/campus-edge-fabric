@@ -328,6 +328,7 @@ class Agent:
         outdir.mkdir(parents=True, exist_ok=True)
         log_ = logging.getLogger(f"cef.task.{task_id[-6:]}")
         started = time.perf_counter()
+        stage = "download"
         if adapter is None or not adapter.available():
             self._fail(lease, f"workload {kind} not available on this device", retryable=True)
             shutil.rmtree(workdir, ignore_errors=True)
@@ -353,14 +354,20 @@ class Agent:
                 outdir=outdir,
                 log=log_,
             )
+            log_.info("download finished in %.3fs", time.perf_counter() - started)
+            stage = "inference"
             result = adapter.run(ctx)
             duration = result.duration_s or (time.perf_counter() - started)
+            stage = "complete"
+            upload_started = time.perf_counter()
+            log_.info("compute finished; submitting result (adapter %.3fs)", duration)
             ok, reason = self.api.complete(
                 self.worker_id or "",
                 task_id,
                 {"attempt": int(lease["attempt"]), "duration_s": round(duration, 4), "output": result.meta},
                 result.files,
             )
+            log_.info("result response received in %.3fs", time.perf_counter() - upload_started)
             if ok:
                 self.completed += 1
                 log.info("✓ %s %s idx=%d %.3fs", kind, task_id[-8:], ctx.idx, duration)
@@ -373,8 +380,8 @@ class Agent:
             log.warning("✗ %s %s transport: %s", kind, task_id[-8:], exc)
             self._fail(lease, f"transport error: {exc}", retryable=True)
         except Exception as exc:  # noqa: BLE001
-            log.exception("unexpected error running %s", task_id)
-            self._fail(lease, f"{type(exc).__name__}: {exc}", retryable=True)
+            log.exception("unexpected error running %s at stage=%s", task_id, stage)
+            self._fail(lease, f"{type(exc).__name__} at {stage}: {exc}", retryable=True)
         finally:
             shutil.rmtree(workdir, ignore_errors=True)
 

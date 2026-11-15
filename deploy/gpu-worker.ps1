@@ -6,6 +6,7 @@ param(
     [string]$Tags = $env:COMPUTERNAME,
     [ValidateRange(1,64)][int]$Slots = 2,
     [ValidateRange(0,32)][int]$Device = 0,
+    [string]$GpuUuid = $env:CEF_GPU_UUID,
     [string]$DataDir,
     [string]$VenvDir,
     [string]$Python = 'python',
@@ -21,6 +22,8 @@ if (-not $DataDir) { $DataDir = Join-Path $repoDir 'cef-gpu-data' }
 $DataDir = [IO.Path]::GetFullPath($DataDir)
 
 function Check-Exit { if ($LASTEXITCODE -ne 0) { throw "Command failed: exit $LASTEXITCODE" } }
+$gpuArguments = @()
+if ($GpuUuid) { $gpuArguments = @('--gpu-uuid', $GpuUuid) }
 function Quote-Argument([string]$value) {
     # Windows CRT argument quoting, including paths ending in a backslash.
     '"' + [regex]::Replace([regex]::Replace($value, '(\\*)"', '$1$1\"'), '(\\+)$', '$1$1') + '"'
@@ -33,13 +36,13 @@ if ($Action -eq 'Install') {
     Check-Exit
     & $pythonExe $entry setup-model --data $DataDir
     Check-Exit
-    & $pythonExe $entry check --data $DataDir --device $Device
+    & $pythonExe $entry check --data $DataDir --device $Device @gpuArguments
     Check-Exit
     return
 }
 if (-not (Test-Path -LiteralPath $pythonExe)) { throw 'Run -Action Install first.' }
 if ($Action -ne 'Start') {
-    & $pythonExe $entry $Action.ToLowerInvariant() --data $DataDir --device $Device
+    & $pythonExe $entry $Action.ToLowerInvariant() --data $DataDir --device $Device @gpuArguments
     Check-Exit
     return
 }
@@ -58,6 +61,7 @@ try {
     $env:PYTHONIOENCODING = 'utf-8'
     $arguments = @($entry, 'run', '--data', $DataDir, '--server', $Server, '--name', $Name,
                    '--tags', $Tags, '--slots', "$Slots", '--device', "$Device")
+    $arguments += $gpuArguments
     if ($CollectProfile) { $arguments += @('--profile-dir', (Join-Path $DataDir 'profiles')) }
     $commandLine = ($arguments | ForEach-Object { Quote-Argument $_ }) -join ' '
     $process = Start-Process -FilePath $pythonExe -ArgumentList $commandLine -WorkingDirectory $repoDir `

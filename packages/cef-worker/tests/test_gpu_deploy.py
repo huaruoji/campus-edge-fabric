@@ -40,3 +40,38 @@ def test_reused_pid_is_not_live_worker(tmp_path):
 
     gpu.write_json(tmp_path / "gpu-runtime.json", {"pid": os.getpid(), "process_created": 0})
     assert gpu.runtime_status(tmp_path)["alive"] is False
+
+
+def test_explicit_cpu_request_uses_cpu_session(monkeypatch):
+    adapter = object.__new__(gpu.CudaInference)
+    adapter.session = object()
+    cpu = object()
+    requests = []
+    monkeypatch.setattr(gpu.InferWorkload, "_session", lambda self, model, device: (requests.append((model, device)), cpu)[1])
+    assert adapter._session("yolo11n", "cpu") is cpu
+    assert requests == [("yolo11n", "cpu")]
+    assert adapter._session("yolo11n", "cuda") is adapter.session
+    assert adapter._session("yolo11n") is adapter.session
+
+
+GPU_UUID = "GPU-771e8ac6-f770-428d-55e4-b3ecfb86cf09"
+
+
+def test_uuid_binds_cuda_and_telemetry(monkeypatch):
+    calls = []
+    monkeypatch.setattr(gpu, "find_nvidia_smi", lambda: "nvidia-smi")
+    monkeypatch.setattr(gpu.subprocess, "run", lambda cmd, **kw: (calls.append(cmd), SimpleNamespace(stdout=GPU_UUID + "\n"))[1])
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "6")
+    monkeypatch.setenv("CEF_GPU_UUID", "")
+    assert gpu.select_gpu(GPU_UUID, 0) == GPU_UUID
+    assert gpu.os.environ["CUDA_VISIBLE_DEVICES"] == gpu.os.environ["CEF_GPU_UUID"] == GPU_UUID
+    assert "--id=" + GPU_UUID in calls[0]
+
+
+def test_multigpu_profile_requires_explicit_uuid(monkeypatch):
+    monkeypatch.setattr(gpu, "find_nvidia_smi", lambda: "nvidia-smi")
+    monkeypatch.setattr(gpu.subprocess, "run", lambda *a, **kw: SimpleNamespace(stdout=GPU_UUID + "\nGPU-other\n"))
+    with pytest.raises(RuntimeError, match="exactly one"):
+        gpu.select_gpu(None, 0)
+    with pytest.raises(ValueError, match="isolated CUDA"):
+        gpu.select_gpu(GPU_UUID, 6)

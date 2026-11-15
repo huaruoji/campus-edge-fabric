@@ -510,37 +510,9 @@ body.export #cef-controls { display:none; }
 第三步给真实命令：下载代码后，在Linux/WSL仓库目录执行worker脚本，使用自己的访问令牌。脚本会在缺少uv时安装uv，初始化Worker依赖并接入协调器。Windows有单独PowerShell入口；不宣传这条bash命令跨平台通用。GPU驱动、运行库、模型及额外工作负载依赖仍需对应配置，不承诺一条命令完成全部GPU环境。不要在投屏里显示真实令牌。</aside>
 </section>
 
-<section class="slide cef-slide" data-sec="02|目标客户" data-tone="ai2" data-steps="3">
-  <header class="cef-head"><h2 class="h2 in">第一批试点面向有批量计算需求的小团队</h2><p class="lead in" style="--d:1">已有多台授权工作站，需要协同处理任务，有可核对的等待或人工成本。</p></header>
-  <div class="cef-content">
-    <table class="cef-table" aria-label="四种切入场景比较">
-      <colgroup><col style="width:21%"><col style="width:28%"><col style="width:30%"><col style="width:21%"></colgroup>
-      <thead><tr><th>切入场景</th><th>频率与算量</th><th>部署与竞争</th><th>采用判断</th></tr></thead>
-      <tbody>
-        <tr><th>图片预处理</th><td>导入数据时，偏 CPU</td><td>低，单机脚本常已足够</td><td>适合试跑</td></tr>
-        <tr class="cef-table-pick" data-on="1,2"><th>批量模型推理</th><td>按模型匹配 CPU / GPU</td><td>中，需匹配模型和驱动</td><td>优先测每批节省</td></tr>
-        <tr><th>Blender 渲染</th><td>随项目，单帧耗时较长</td><td>中高，专用渲染工具成熟</td><td>暂缓</td></tr>
-        <tr><th>通用资源管理</th><td>持续运维，随设备规模增长</td><td>高，需权限和配额</td><td>后续扩展</td></tr>
-      </tbody>
-    </table>
-    <div class="cef-roles" data-k="2">
-      <div><h3 class="h3">谁使用、谁批准</h3><p class="body">开发者与项目成员使用，设备所有者授权，团队自行部署与协作。</p></div>
-      <div><h3 class="h3">并行验证</h3><p class="body">课程项目、开发小组与创作团队。已有成熟集群的团队不必重复部署。</p></div>
-    </div>
-  </div>
-  <p class="cef-source cap">使用需求与接入成本待验证 · <a href="https://www.sherlock.stanford.edu/docs/">Stanford Sherlock</a> · <a href="https://docs.ultralytics.com/modes/predict">Ultralytics 批量推理文档</a></p>
-  <aside class="notes">第一批使用者先验证团队批量计算（约 45 秒）
 
-核心表达　先找已有多台授权设备、需要协同完成批量任务、仍有排队或手工协调成本的团队。
 
-现场讲法　先找课程项目、开发小组、科研或创作团队，让他们带一批真实任务和获得授权的设备试用。重点看任务能否合理拆分、结果能否验收、是否减少手工协调，而不是限定某个学科或某种数据。当前图片处理与模型推理有实测证据，渲染已有适配器但未在本轮验收。科学计算等任务可作为后续适配方向，不能当成已经实现的功能。使用者不等于付费客户，开源自部署与可选运维支持分开。
-
-依据　[R1–R3] 当前产品与验收记录；[E4] 是模型推理示例，不代表产品仅服务视觉任务。表中是切入场景与采用假设，不是所有方向均已完成验收。渲染有成熟专用方案，通用资源管理仍需补权限与运维能力。
-
-放映：先扫一眼四个场景。按一下高亮批量推理，再按一下交代使用与授权角色。</aside>
-</section>
-
-<section class="slide cef-slide cef-product" data-sec="03|产品与实测" data-tone="tool" data-steps="5" data-3d="join,dispatch,collect,none,none" data-export-all>
+<section class="slide cef-slide cef-product" data-sec="02|产品与实测" data-tone="tool" data-steps="5" data-3d="join,dispatch,collect,none,none" data-export-all>
   <header class="cef-head"><h2 class="h2 in">多设备协同处理与实测结果</h2><p class="lead in" style="--d:1">CPU 缩图与双 GPU 推理分别比较两台单机和共同运行，三次重复取中位数。</p></header>
   <div class="cef-architecture" data-at="0,1,2">
     <div data-stop="0"><h3 class="h3"><span>01</span> 接入设备</h3><p class="small">Worker 主动注册、上报心跳和能力。</p></div>
@@ -585,6 +557,8 @@ body.export #cef-controls { display:none; }
   <p class="cef-source cap"><a href="https://github.com/huaruoji/campus-edge-fabric/blob/main/docs/testing/thumbnail-report-2026-11-14.md">CPU 报告</a> · <a href="https://github.com/huaruoji/campus-edge-fabric/blob/main/docs/testing/infer-2026-11-14/report.md">双 GPU 报告</a> · <a href="https://github.com/huaruoji/campus-edge-fabric/blob/main/docs/testing/demo-2026-11-15/result-data.json">数值与计算依据</a> · <a href="https://cef.huaruoji.com/#/devices">产品设备页</a></p>
   <aside class="notes">多设备协同处理与实测结果（主讲约 70 秒）
 
+使用场景顺带介绍：课程项目、开发小组、科研与创作团队，已有多台授权设备，需要一起处理一批任务。本次以图片处理和模型推理为真实案例，不限定视觉任务，也不宣称其他适配器均已验收。由设备所有者授权接入，用户统一提交、看各机贡献、集中取回结果；不再单独展示目标客户页。
+
 一个人提交整批输入，Worker 根据能力和空闲容量领取任务，结果统一返回。我们分别测试了 CPU 缩图和双 GPU 推理，用同一批输入比较两台单机和共同运行，每种条件重复三次，展示中位数。
 
 CPU 测试每批 100 张，共同运行的有效吞吐为每秒 3.3055 张，比最佳单机提高 26.17%，聚合效率为 88.26%。900 个正式输出全部通过逐像素校验。
@@ -604,7 +578,7 @@ GPU 测试的 110 张组，共同运行有效吞吐为每秒 2.7463 张，比最
 任务效果图：CPU 图使用 Berkeley BSDS300 的 102061.jpg 与 101085.jpg 及两台 Worker 返回的 PNG，来自作业 job_01M7CKHCVQHAWRHF5Z2P89C6SE。GPU 图使用 Ultralytics COCO128 / COCO 的 8 张图片及保存的检测 JSON 叠图，来自作业 job_01M7D8E1ESN3WJB2VTCV7FJWKQ，两台各完成 4 张。两张图对应 2026-11-14 的真实输出；图片可点击打开完整效果图。</aside>
 </section>
 
-<section class="slide cef-slide pitch-late pitch-summary" data-sec="04|发展路径" data-tone="ai2" data-steps="2">
+<section class="slide cef-slide pitch-late pitch-summary" data-sec="03|发展路径" data-tone="ai2" data-steps="2">
   <header class="cef-head"><h2 class="h2 in">开源连接设备，服务创造收入</h2></header>
   <div class="summary-root"><h3>开源组网工具</h3><p>复用已有设备，统一提交与取回</p></div>
   <div class="summary-expansion" data-k="1">

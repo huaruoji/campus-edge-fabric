@@ -425,6 +425,20 @@ body.export #cef-controls { display:none; }
 .pitch-road{top:365px}.pitch-road h3{font-size:43px}
 
 </style>
+<style>
+/* Final slide only: one open-source foundation and two commercial options. */
+.pitch-summary .cef-head{top:140px}
+.summary-root{position:absolute;left:410px;right:410px;top:300px;text-align:center;border-bottom:2px solid var(--ai2);padding-bottom:25px}
+.summary-root h3{font-size:54px;line-height:1.4;color:var(--ai2);margin-bottom:12px}
+.summary-root p{font-size:30px;line-height:1.6;color:var(--slate)}
+.summary-expansion{position:absolute;left:240px;right:240px;top:440px}
+.summary-connectors{display:block;width:100%;height:100px;color:var(--ai2);opacity:.65}
+.summary-options{display:grid;grid-template-columns:1fr 1fr;gap:120px;text-align:center;margin-top:13px}
+.summary-options span{font-size:24px;color:var(--slate)}
+.summary-options h3{font-size:46px;line-height:1.4;margin:14px 0}
+.summary-options p{font-size:30px;line-height:1.8;color:var(--slate)}
+.summary-close{font-size:34px;text-align:center;line-height:1.5;margin-top:67px;color:var(--ai2)}
+</style>
 </head>
 <!-- data-who：左下角署名；data-hint：首页右下角的按键提示 -->
 <body data-who="Campus Edge Fabric" data-hint="空格或 → 前进　← 返回　N 讲稿　F 全屏">
@@ -561,29 +575,19 @@ GPU 测试的 110 张组，共同运行有效吞吐为每秒 2.7463 张，比最
 数据来源：CPU 与 GPU 数据依据下方报告和精简数据链接。</aside>
 </section>
 
-<section class="slide cef-slide pitch-late" data-sec="04|替代方案" data-tone="ai2" data-steps="2">
-  <header class="cef-head"><h2 class="h2 in">少一点手工协调，多一个统一入口</h2><p class="lead in">不是替代所有云与集群，先把手里的设备用起来。</p></header>
-  <div class="cef-content pitch-triptych pitch-alternatives"><article><span class="pitch-index">已经够用</span><h3>单机脚本</h3><p>任务少，一台能完成<br>无需额外组网</p></article><article><span class="pitch-index">需要新资源</span><h3>云算力</h3><p>缺设备、缺显存<br>购买弹性资源</p></article><article class="pitch-selected"><span class="pitch-index">复用已有设备</span><h3>CEF</h3><p>团队已有多台电脑<br>一次提交，集中收结果</p></article></div>
-  <p class="cef-bottom pitch-statement" data-k="1">开源、自部署，让小团队先用起来。</p>
-  <aside class="notes">替代方案（约30秒）
-单机能完成就不必引入分布式，缺显存或需要稳定弹性资源时云更合适。CEF的切入点是已有设备的小团队，希望减少反复分发与收结果。接入成本、人工节省和持续使用意愿仍待验证，不宣称独有调度技术。技术答辩备查：HTCondor可利用空闲桌面，BOINC支持志愿计算，Slurm/Run:ai支持成熟资源管理，Ray支持开发工作流，Flamenco/Deadline服务渲染。它们是不同层次的替代方案；是否比这些方案易用需实测，不能用这一页证明优势已成立。</aside>
-</section>
-
-<section class="slide cef-slide pitch-late" data-sec="05|商业路径" data-tone="data" data-steps="3">
-  <header class="cef-head"><h2 class="h2 in">开源是基础，服务与交易是可能的收入</h2><p class="lead in">社区共同建设，专业服务与算力共享探索增量。</p></header>
-  <div class="cef-content pitch-business"><div class="pitch-foundation"><span class="pitch-index">基础</span><h3>开源自部署</h3><p>先使用，再贡献；不收开源使用权费用</p></div><div class="pitch-branches"><article data-k="1"><span class="pitch-index">可选服务 · 待验证</span><h3>组织内部署与运维</h3><p>集成、适配、维护与技术支持<br>探索国企等组织的技术合作</p></article><article data-k="2"><span class="pitch-index">长期探索 · 尚未实现</span><h3>闲置算力交易</h3><p>个人提供授权设备，用户购买服务<br>平台探索撮合与服务费</p></article></div></div>
-  <p class="cef-source cap">MIT 许可，计划开放仓库；当前仓库仍为私有。交易、计费与结算未实现。</p>
-  <aside class="notes">商业路径（约45秒）
-开源是产品基础。代码采用MIT许可，但仓库当前私有，公开发布是计划，不在这次改版自动公开。实验室和开发者可自行部署，不向其预设软件订阅。愿意为交付、集成和保障付费的组织，可以选择部署运维服务；国企等是可能的技术合作方向，不是已有客户。进入这类组织需补权限、审计、内网交付与支持能力。
-另一条更长期路径是让个人出租授权闲置算力，平台撮合任务并探索服务费。今天只有受控团队池，没有交易和结算。目标是比云服务更低的有效任务成本，而非只看GPU小时报价。总成本包含设备主收益、电费、带宽、折旧、失败重试和平台运维，需在同等输出质量下与云比较。数据隔离、结果验证、计量结算、设备退出与服务稳定性是前提，没有证据就不承诺固定折扣。两条路径分别验证，不假设一定成功。</aside>
-</section>
-
-<section class="slide cef-slide pitch-late" data-sec="06|下一步" data-tone="ai2" data-steps="2">
-  <header class="cef-head"><h2 class="h2 in">先有人持续使用，再验证商业化</h2><p class="lead in">用实际任务和成本，决定下一步做什么。</p></header>
-  <div class="cef-content pitch-triptych pitch-road"><article><span class="pitch-index">现在</span><h3>开源与使用</h3><p>准备公开代码与接入指南<br>收集真实任务与反馈</p></article><article><span class="pitch-index">接下来</span><h3>验证服务需求</h3><p>看谁需要部署与运维<br>核算支持成本与付费意愿</p></article><article><span class="pitch-index">更长期</span><h3>探索算力交易</h3><p>先解决安全、计量与信任<br>再验证能否低于云成本</p></article></div>
-  <div class="cef-bottom" data-k="1"><h3 class="pitch-closing">带上你的设备，和一批真实任务。</h3><p class="lead">寻找使用者、设备贡献者与技术合作伙伴</p></div>
-  <aside class="notes">结尾（约30秒）
-当前核心服务已能运行，但规模化运营和商业化尚未验证。第一步用课程及开发者社区触达使用者，观察重复使用、输出正确性和设备接入难点。第二步只有真实出现付费交付需求才开展组织试点，算清每次部署与后续支持成本。第三步交易需要新的安全与运营能力，不能把团队内可信计算直接等同于公开市场。我们希望找到愿意带授权设备和真实任务试用、贡献代码，或共同探索组织技术服务的伙伴。未来目标是降低正确完成任务的总成本，而不是宣称硬件免费就一定更便宜。</aside>
+<section class="slide cef-slide pitch-late pitch-summary" data-sec="04|发展路径" data-tone="ai2" data-steps="2">
+  <header class="cef-head"><h2 class="h2 in">开源连接设备，服务创造收入</h2></header>
+  <div class="summary-root"><h3>开源组网工具</h3><p>复用已有设备，统一提交与取回</p></div>
+  <div class="summary-expansion" data-k="1">
+    <svg class="summary-connectors" viewBox="0 0 1440 100" aria-hidden="true"><path d="M720 0V42M330 100V42H1110V100" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+    <div class="summary-options"><article><span>待验证需求</span><h3>组织技术服务</h3><p>部署、集成、运维<br>面向国企等组织</p></article><article><span>长期探索</span><h3>闲置算力交易</h3><p>个人出租，平台撮合<br>目标：比云更低的用算成本</p></article></div>
+    <p class="summary-close">先让团队用起来，再验证服务与交易。</p>
+  </div>
+  <aside class="notes">收尾与发展路径（约40秒）
+先出现开源底座：CEF首先是复用团队现有设备的组网计算工具。按一次，同时展开两条商业探索，不是先后必须实现的阶段。第一条，为需要交付保障的组织提供可选部署、集成与运维服务，国企等是潜在合作方向，不是已有客户。第二条，长期探索个人出租授权闲置设备、平台撮合并收取服务费，目前没有交易、计费与结算。
+“比云更低的用算成本”是待验证目标，不是价格承诺。应按同等输出质量下每个正确完成任务的总成本比较，计入设备主收益、电费、带宽、折旧、失败重试与运维。组织服务需补权限、审计与内网部署，交易需解决隔离、计量、结果验证、结算、数据保护和稳定性。代码采用MIT许可，仓库当前私有，公开发布仍是计划。
+替代方案备查：单机够用就用单机，缺设备或显存可选云；CEF针对已有多台设备的小团队，不宣称优于所有云与集群。HTCondor、BOINC、Slurm、Run:ai、Ray及渲染工具各有适用场景，接入时间和人工节省需实测。
+先通过课程与开发者社区寻找真实使用者，观察重复使用与接入成本，再验证组织服务的付费意愿和支持成本。最后口头邀请使用者、设备贡献者与技术合作伙伴，不重复显示招募区块。</aside>
 </section>
 
 

@@ -2,6 +2,8 @@
 
 CPU thumbnail 与 GPU infer 共用这个交付入口。组员从这里查看方法、实测结果和可核算的证据，原始运行目录保留在测试者本地。
 
+用于 5 分钟展示的 [演示数据、对比图与结论](demo-2026-11-15/README.md) 已按两组历史实测整理，包含讲述顺序和 GPU 数值校验范围。
+
 | 实验 | Procedure | Report | 精简证据 | 复跑脚本 |
 | --- | --- | --- | --- | --- |
 | CPU：thumbnail 单机/双机 | [测试步骤](thumbnail-procedure.md) | [2026-11-14 报告](thumbnail-report-2026-11-14.md) | [JSON](evidence/thumbnail-2026-11-14.json) | [benchmarks/thumbnail](../../benchmarks/thumbnail/) |

@@ -1,0 +1,327 @@
+{
+  "prepared_on": "2026-11-15",
+  "experiment_date": "2026-11-14",
+  "sources": [
+    {
+      "path": "docs\\testing\\evidence\\thumbnail-2026-11-14.json",
+      "sha256": "b68ecbe9386a80ec883298a3cf05457316dcefdb2cd532208bed5067cd7de9fb"
+    },
+    {
+      "path": "docs\\testing\\infer-2026-11-14\\evidence.json",
+      "sha256": "caf3005dfd5b9af09d5502b3f35d6efab360276720d8d05f5fb04752a7f1fba7"
+    }
+  ],
+  "cpu": {
+    "groups": [
+      {
+        "name": "jochi 单独",
+        "source_condition": "single-2",
+        "inputs_per_trial": 100,
+        "trials": 3,
+        "median_s": 38.170509300005506,
+        "min_s": 38.093628799993894,
+        "max_s": 41.179793299990706,
+        "times_s": [
+          38.170509300005506,
+          41.179793299990706,
+          38.093628799993894
+        ],
+        "verified_outputs": 300,
+        "total_outputs": 300,
+        "verified_images_s_median": 2.6198235714917635,
+        "job_ids": [
+          "job_01M7CKFXJK320TR39RHNNXY070",
+          "job_01M7CKJQ7QEV5TCRYT1TBZMBTS",
+          "job_01M7CKX7EDPZXBCSPGYG1VD84K"
+        ]
+      },
+      {
+        "name": "liusic 单独",
+        "source_condition": "single-1",
+        "inputs_per_trial": 100,
+        "trials": 3,
+        "median_s": 88.84800840000389,
+        "min_s": 79.88160380000772,
+        "max_s": 92.34653329999128,
+        "times_s": [
+          88.84800840000389,
+          92.34653329999128,
+          79.88160380000772
+        ],
+        "verified_outputs": 300,
+        "total_outputs": 300,
+        "verified_images_s_median": 1.125517631749139,
+        "job_ids": [
+          "job_01M7CKCV8V80FRR90RP0Z78E1C",
+          "job_01M7CKNWXD325RW0S7XM5VCEBG",
+          "job_01M7CKTEY2QBC8ZRBEAZ2BCD06"
+        ]
+      },
+      {
+        "name": "两台一起",
+        "source_condition": "pool",
+        "inputs_per_trial": 100,
+        "trials": 3,
+        "median_s": 30.252708600004553,
+        "min_s": 29.501743200002238,
+        "max_s": 31.88927010000043,
+        "times_s": [
+          30.252708600004553,
+          31.88927010000043,
+          29.501743200002238
+        ],
+        "verified_outputs": 300,
+        "total_outputs": 300,
+        "verified_images_s_median": 3.305489148828973,
+        "job_ids": [
+          "job_01M7CKHCVQHAWRHF5Z2P89C6SE",
+          "job_01M7CKM7QQD8T9AG0HJJ886FFT",
+          "job_01M7CKS147P40B10RBP030R2WT"
+        ]
+      }
+    ],
+    "waiting_time_reduction_pct": 20.743240908236483,
+    "verified_throughput_gain_pct": 26.172204296443603,
+    "throughput_ratios": {
+      "single_throughput_sum_images_s": 3.7453412032409026,
+      "speedup_vs_best_single": 1.261722042964436,
+      "eta": 0.882560218003284,
+      "eta_definition": "pool throughput / sum of separately measured single-worker throughputs; empirical reference, not a theoretical ceiling"
+    },
+    "timing": "submit through ZIP download, input uploads included; reference validation excluded",
+    "formal_reference_pass": "900/900; exact pixels"
+  },
+  "gpu": {
+    "by_batch_size": {
+      "8": [
+        {
+          "name": "jochi 单独",
+          "source_condition": "single-1",
+          "inputs_per_trial": 8,
+          "trials": 3,
+          "median_s": 5.62963939999463,
+          "min_s": 5.299194199993508,
+          "max_s": 5.735876799997641,
+          "times_s": [
+            5.735876799997641,
+            5.62963939999463,
+            5.299194199993508
+          ],
+          "verified_outputs": 24,
+          "total_outputs": 24,
+          "verified_images_s_median": 1.421050165310345,
+          "job_ids": [
+            "job_01M7D8CT9T6QF7YRCP5B3A4X3V",
+            "job_01M7DAEHAWRMZ5VNPJ1JQNAPP0",
+            "job_01M7DAP918ZB4AKN89830JYYXP"
+          ]
+        },
+        {
+          "name": "liusic 单独",
+          "source_condition": "single-2",
+          "inputs_per_trial": 8,
+          "trials": 3,
+          "median_s": 7.274882099998649,
+          "min_s": 6.3360069999762345,
+          "max_s": 7.7479696000227705,
+          "times_s": [
+            6.3360069999762345,
+            7.7479696000227705,
+            7.274882099998649
+          ],
+          "verified_outputs": 24,
+          "total_outputs": 24,
+          "verified_images_s_median": 1.099674178912327,
+          "job_ids": [
+            "job_01M7D8D992XK2PWC4QEVMPE6WA",
+            "job_01M7DADDKFFJHDC2QSWFWK9WA3",
+            "job_01M7DAPQ09AAQPZF8NA8EN8QXE"
+          ]
+        },
+        {
+          "name": "两台一起",
+          "source_condition": "pool",
+          "inputs_per_trial": 8,
+          "trials": 3,
+          "median_s": 4.1129961000115145,
+          "min_s": 3.72901130001992,
+          "max_s": 4.348101899988251,
+          "times_s": [
+            3.72901130001992,
+            4.1129961000115145,
+            4.348101899988251
+          ],
+          "verified_outputs": 24,
+          "total_outputs": 24,
+          "verified_images_s_median": 1.9450541175999665,
+          "job_ids": [
+            "job_01M7D8E1ESN3WJB2VTCV7FJWKQ",
+            "job_01M7DAE58NPXCNP8M858WYMVHJ",
+            "job_01M7DANXTJCR3J17081Y1Y9F5J"
+          ]
+        }
+      ],
+      "32": [
+        {
+          "name": "jochi 单独",
+          "source_condition": "single-1",
+          "inputs_per_trial": 32,
+          "trials": 3,
+          "median_s": 22.082243500015466,
+          "min_s": 20.966828100004932,
+          "max_s": 23.227648600004613,
+          "times_s": [
+            20.966828100004932,
+            22.082243500015466,
+            23.227648600004613
+          ],
+          "verified_outputs": 84,
+          "total_outputs": 96,
+          "verified_images_s_median": 1.267987104660828,
+          "job_ids": [
+            "job_01M7D8ECFNNP9QWDR78HCBCRMH",
+            "job_01M7D8YPS6GXA4M6HDTZ0E0XXF",
+            "job_01M7DAR2C8N315B04W51Z642GN"
+          ]
+        },
+        {
+          "name": "liusic 单独",
+          "source_condition": "single-2",
+          "inputs_per_trial": 32,
+          "trials": 3,
+          "median_s": 23.880781399988336,
+          "min_s": 23.093821099988418,
+          "max_s": 26.052018799993675,
+          "times_s": [
+            23.880781399988336,
+            26.052018799993675,
+            23.093821099988418
+          ],
+          "verified_outputs": 96,
+          "total_outputs": 96,
+          "verified_images_s_median": 1.339989653773039,
+          "job_ids": [
+            "job_01M7D8FB1T04YWBYKVXS87J6PX",
+            "job_01M7D8WSBWKFFN9Q36X6FBWQGV",
+            "job_01M7DAS3PXSSFSEKED4EDPXASJ"
+          ]
+        },
+        {
+          "name": "两台一起",
+          "source_condition": "pool",
+          "inputs_per_trial": 32,
+          "trials": 3,
+          "median_s": 12.058651800005464,
+          "min_s": 11.596907500002999,
+          "max_s": 17.094887599989306,
+          "times_s": [
+            17.094887599989306,
+            11.596907500002999,
+            12.058651800005464
+          ],
+          "verified_outputs": 87,
+          "total_outputs": 96,
+          "verified_images_s_median": 2.4049122970767645,
+          "job_ids": [
+            "job_01M7D8GHR93A8Z7BABHWYXEEG8",
+            "job_01M7D8Y472FZ5H6GRNNKN51MK1",
+            "job_01M7DAQDXEC45YTGM28VQCHM18"
+          ]
+        }
+      ],
+      "110": [
+        {
+          "name": "jochi 单独",
+          "source_condition": "single-1",
+          "inputs_per_trial": 110,
+          "trials": 3,
+          "median_s": 70.07903379999334,
+          "min_s": 69.00230689998716,
+          "max_s": 70.59006919999956,
+          "times_s": [
+            70.59006919999956,
+            70.07903379999334,
+            69.00230689998716
+          ],
+          "verified_outputs": 285,
+          "total_outputs": 330,
+          "verified_images_s_median": 1.3556122972689877,
+          "job_ids": [
+            "job_01M7D8HBB26D83T1RPBFAQSR37",
+            "job_01M7DAAZPVYKBFXJ7T60MV4H6Z",
+            "job_01M7DAGK5WRP31MTFFBNRJDMRE"
+          ]
+        },
+        {
+          "name": "liusic 单独",
+          "source_condition": "single-2",
+          "inputs_per_trial": 110,
+          "trials": 3,
+          "median_s": 79.05096560000675,
+          "min_s": 76.27208500000415,
+          "max_s": 80.06883659999585,
+          "times_s": [
+            76.27208500000415,
+            80.06883659999585,
+            79.05096560000675
+          ],
+          "verified_outputs": 330,
+          "total_outputs": 330,
+          "verified_images_s_median": 1.39150735433889,
+          "job_ids": [
+            "job_01M7D8KS6D0XP2NF0J8K2W8H8F",
+            "job_01M7DA6KVJ5QW533BBE78VC3KC",
+            "job_01M7DAK00DXB6AH30NRWZXX6HQ"
+          ]
+        },
+        {
+          "name": "两台一起",
+          "source_condition": "pool",
+          "inputs_per_trial": 110,
+          "trials": 3,
+          "median_s": 37.504681199992774,
+          "min_s": 36.54554280001321,
+          "max_s": 38.46455989999231,
+          "times_s": [
+            36.54554280001321,
+            38.46455989999231,
+            37.504681199992774
+          ],
+          "verified_outputs": 306,
+          "total_outputs": 330,
+          "verified_images_s_median": 2.7463238375699044,
+          "job_ids": [
+            "job_01M7D8VBXQNKG19JV6ZTCN7JXY",
+            "job_01M7DA9K1D1RJ839KJ7N4BJ4N1",
+            "job_01M7DAF6M1CT784B7D4CNMY9TZ"
+          ]
+        }
+      ]
+    },
+    "waiting_time_reduction_pct_110": 46.48230837909135,
+    "verified_throughput_gain_pct_110": 97.36322837292457,
+    "throughput_ratios_by_batch_size": {
+      "8": {
+        "single_throughput_sum_images_s": 2.520724344222672,
+        "speedup_vs_best_single": 1.36874416194532,
+        "eta": 0.7716250775527668,
+        "eta_definition": "pool throughput / sum of separately measured single-worker throughputs; empirical reference, not a theoretical ceiling"
+      },
+      "32": {
+        "single_throughput_sum_images_s": 2.6079767584338667,
+        "speedup_vs_best_single": 1.7947245266448133,
+        "eta": 0.9221371660232717,
+        "eta_definition": "pool throughput / sum of separately measured single-worker throughputs; empirical reference, not a theoretical ceiling"
+      },
+      "110": {
+        "single_throughput_sum_images_s": 2.7471196516078775,
+        "speedup_vs_best_single": 1.9736322837292457,
+        "eta": 0.9997103096556034,
+        "eta_definition": "pool throughput / sum of separately measured single-worker throughputs; empirical reference, not a theoretical ceiling"
+      }
+    },
+    "timing": "registered-dataset submit through ZIP download; initial upload and validation excluded",
+    "formal_reference_pass": "1260/1350; fixed numerical tolerances, not recognition accuracy",
+    "warning": "110-image pool: 306/330 pass; precision fix has not been rerun in this evidence"
+  }
+}

@@ -472,7 +472,7 @@ CEF把分散的授权设备接成一个团队算力池，用户从统一入口�
 最初找课程项目、开发者、科研及创作小组试用。他们已有授权设备，也有能拆分、能验收的任务。通过队友、课程社群与开发者社区触达，让用户带真实输入试跑，记录接入困难、任务成功率与重复使用情况。实验室当然可以用，也可以贡献代码，但技术团队未必愿意购买这样的软件，我们不把其付费当作商业模式前提。当前实测覆盖缩图与批量识别；渲染有适配器，但没有本轮实测，不宣传任意程序都能运行。</aside>
 </section>
 
-<section class="slide cef-slide" data-sec="03|产品与实测" data-tone="tool" data-steps="3">
+<section class="slide cef-slide" data-sec="03|产品与实测" data-tone="tool" data-steps="4">
   <header class="cef-head"><h2 class="h2 in">提交一次，多台处理，统一取回</h2><p class="lead in">网站展示真实任务，报告解释实测边界。</p></header>
   <div class="cef-content pitch-flow" data-at="0">
     <div class="pitch-triptych"><article><span class="pitch-index">01</span><h3>接入设备</h3><p>所有者授权<br>设备主动领取任务</p></article><article><span class="pitch-index">02</span><h3>确认提交</h3><p>描述目标、核对方案<br>一次发出整批任务</p></article><article><span class="pitch-index">03</span><h3>拿到结果</h3><p>看每台设备的贡献<br>统一下载结果包</p></article></div>
@@ -481,11 +481,12 @@ CEF把分散的授权设备接成一个团队算力池，用户从统一入口�
     <div><span class="pitch-index">CPU 图片处理 · 历史实测</span><strong>+26.17<small>%</small></strong><h3>有效吞吐提升</h3><p>相对最快单机，三次测量取中位数</p></div>
     <div class="pitch-proof-side"><h3>900 / 900 输出校验通过</h3><p>双机有效吞吐 3.3055 张 / 秒<br>聚合效率 η = 88.26%</p><p>100 张不同输入，跨轮复用<br>有限批次服务测试，不是峰值算力</p></div>
   </div>
-  <div class="cef-content pitch-live" data-at="2"><span class="pitch-index">现在打开真实网站</span><h3>从一句需求，到一份结果</h3><p>设备 → 确认任务 → 各机贡献 → 下载结果</p><a class="pitch-demo-link" href="https://cef.huaruoji.com/#/submit" target="_blank" rel="noopener noreferrer">打开现场演示 ↗</a><div class="pitch-demo-nav"><a href="https://cef.huaruoji.com/#/devices" target="_blank" rel="noopener noreferrer">设备</a><a href="https://cef.huaruoji.com/#/jobs" target="_blank" rel="noopener noreferrer">任务与结果</a><a href="https://cef.huaruoji.com/#/experiments" target="_blank" rel="noopener noreferrer">性能对照</a></div></div>
+  <div class="cef-content pitch-proof-grid" data-at="2"><div><span class="pitch-index">双 GPU 批量识别 · 历史诊断对照</span><strong>46.48<small>%</small></strong><h3>整批等待时间减少</h3><p>110 张输入，三次测量取中位数</p></div><div class="pitch-proof-side"><h3>较快单机 70.08 秒 → 双机 37.50 秒</h3><p>双机数值参考通过 306 / 330<br>未通过输出不计有效吞吐</p><p>观察到提速，精度修复仍待大批次复验</p></div></div>
+  <div class="cef-content pitch-live" data-at="3"><span class="pitch-index">现在打开真实网站</span><h3>从一句需求，到一份结果</h3><p>设备 → 确认任务 → 各机贡献 → 下载结果</p><a class="pitch-demo-link" href="https://cef.huaruoji.com/#/submit" target="_blank" rel="noopener noreferrer">打开现场演示 ↗</a><div class="pitch-demo-nav"><a href="https://cef.huaruoji.com/#/devices" target="_blank" rel="noopener noreferrer">设备</a><a href="https://cef.huaruoji.com/#/jobs" target="_blank" rel="noopener noreferrer">任务与结果</a><a href="https://cef.huaruoji.com/#/experiments" target="_blank" rel="noopener noreferrer">性能对照</a></div></div>
   <p class="cef-source cap">历史数据：2026-11-14 · <a href="https://github.com/huaruoji/campus-edge-fabric/blob/main/docs/testing/demo-2026-11-15/README.md" target="_blank" rel="noopener noreferrer">实测口径与局限（仓库需授权）</a></p>
   <aside class="notes">产品与网站（约2分钟）
 第1步讲流程：当前仅运行已安装的任务适配器，不接收任意远程命令；数据由CLI或本地Agent登记，网页选数据并确认。第2步给历史CPU实测：100张不同图片、单机A/单机B/双机，各测3次，共900个正式输出通过逐像素校验。有效吞吐3.3055张/秒，相对最佳单机+26.17%，η=88.26%。计时包含上传到结果ZIP下载，不含事后校验。来源docs/testing/demo-2026-11-15/README.md及原始thumbnail报告。不是当前在线状态，也未证明稳定饱和。GPU旧大批次存在部分数值差异，不把它讲成完整验收。
-第3步新标签打开网站，放映页面保持原位置。提前在自己的浏览器连接，不在投屏中显示Token。现场看设备→选择本次输入（评委新文件先通过CLI登记，不谎称Web支持上传）→描述任务→核对并确认→任务详情指出两台设备有效贡献→下载结果→看历史性能对照→切回本标签。只提交有授权的演示任务，勿误点开启长评测。若设备或网络不可用，诚实展示失败/等待，再切有日期的历史记录，不冒充现场成功。物理设备独立性与所有者授权仍应由团队确认。</aside>
+第3步展示上游新增的双GPU历史对照：110张，70.08秒到37.50秒，中位等待时间减少46.48%；这是诊断结果，双机306/330通过数值参考，不能称作完整精度验收。与CPU包含上传的计时口径不同，不跨任务比较绝对吞吐。第4步新标签打开网站，放映页面保持原位置。提前在自己的浏览器连接，不在投屏中显示Token。现场看设备→选择本次输入（评委新文件先通过CLI登记，不谎称Web支持上传）→描述任务→核对并确认→任务详情指出两台设备有效贡献→下载结果→看历史性能对照→切回本标签。只提交有授权的演示任务，勿误点开启长评测。若设备或网络不可用，诚实展示失败/等待，再切有日期的历史记录，不冒充现场成功。物理设备独立性与所有者授权仍应由团队确认。</aside>
 </section>
 
 <section class="slide cef-slide" data-sec="04|替代方案" data-tone="ai2" data-steps="2">

@@ -19,6 +19,32 @@ if [ "$before" = "$after" ]; then
   exit 0
 fi
 echo "deploy: $before -> $after"
+# A running comparison must keep one coordinator build and timing window.
+# Leave origin/main fetched, then retry the pending deployment on the next tick.
+guard_status=0
+if [ -x .venv/bin/python ]; then
+  .venv/bin/python - <<'PY' || guard_status=$?
+import os
+import sqlite3
+from pathlib import Path
+
+path = Path(os.environ.get("CEF_DATA", "/var/lib/cef")) / "cef.db"
+if not path.exists():
+    raise SystemExit(0)
+conn = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=5)
+try:
+    exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='experiments'").fetchone()
+    active = exists and conn.execute("SELECT 1 FROM experiments WHERE state IN ('queued','running') LIMIT 1").fetchone()
+finally:
+    conn.close()
+raise SystemExit(10 if active else 0)
+PY
+fi
+case "$guard_status" in
+  0) ;;
+  10) echo "deploy deferred: comparison experiment in progress"; exit 0 ;;
+  *) echo "deploy deferred: cannot verify experiment state" >&2; exit 1 ;;
+esac
 git reset --hard -q "$after"
 
 # --- backend -------------------------------------------------------------
